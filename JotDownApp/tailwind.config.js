@@ -1,3 +1,5 @@
+import daisyui from 'daisyui'
+
 export default {
   darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
@@ -8,7 +10,7 @@ export default {
       },
     },
   },
-  plugins: [require('daisyui')],
+  plugins: [daisyui],
   daisyui: {
     themes: ['light', 'dark'],
   },

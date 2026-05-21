@@ -1,13 +1,14 @@
-import { useEffect } from 'react'
+import { useNoteDraft } from '../../hooks/useNoteDraft'
 
-function NoteEditor({ note, draft }) {
-  useEffect(() => {
-    if (!note) return
-    draft.reset(note)
-  }, [note, draft])
+function NoteEditor({ note, onSave }) {
+  const draft = useNoteDraft(note, onSave)
 
   if (!note) {
-    return <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-slate-600">Chọn một ghi chú để bắt đầu.</div>
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
+        Chọn một ghi chú để bắt đầu.
+      </div>
+    )
   }
 
   return (

@@ -1,12 +1,10 @@
 import NoteCard from '../features/notes/NoteCard'
 import NoteEditor from '../features/notes/NoteEditor'
 import { useNoteWorkspace } from '../hooks/useNoteWorkspace'
-import { useNoteDraft } from '../hooks/useNoteDraft'
 
 function NotesPage() {
-  const { notes, selectedNoteId, setSelectedNoteId, addNote, deleteNote } = useNoteWorkspace()
+  const { notes, selectedNoteId, setSelectedNoteId, addNote, deleteNote, updateNote } = useNoteWorkspace()
   const selectedNote = notes.find((note) => note.id === selectedNoteId) || notes[0]
-  const noteDraft = useNoteDraft(selectedNote)
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
@@ -40,7 +38,7 @@ function NotesPage() {
             <h2 className="text-2xl font-semibold text-slate-900">Chi tiết</h2>
           </div>
         </div>
-        <NoteEditor note={selectedNote} draft={noteDraft} />
+        <NoteEditor key={selectedNote?.id || 'empty-note'} note={selectedNote} onSave={updateNote} />
       </section>
     </div>
   )

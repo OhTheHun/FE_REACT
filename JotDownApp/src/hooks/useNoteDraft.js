@@ -1,25 +1,13 @@
-import { useEffect, useState } from 'react'
-import { useNoteWorkspace } from './useNoteWorkspace'
+import { useState } from 'react'
 
-export function useNoteDraft(selectedNote) {
-  const { updateNote } = useNoteWorkspace()
+export function useNoteDraft(selectedNote, updateNote) {
   const [title, setTitle] = useState(selectedNote?.title || '')
   const [content, setContent] = useState(selectedNote?.content || '')
 
-  useEffect(() => {
-    setTitle(selectedNote?.title || '')
-    setContent(selectedNote?.content || '')
-  }, [selectedNote])
-
   const save = () => {
-    if (!selectedNote) return
+    if (!selectedNote || !updateNote) return
     updateNote({ id: selectedNote.id, title, content })
   }
 
-  const reset = (note) => {
-    setTitle(note?.title || '')
-    setContent(note?.content || '')
-  }
-
-  return { title, content, setTitle, setContent, save, reset }
+  return { title, content, setTitle, setContent, save }
 }

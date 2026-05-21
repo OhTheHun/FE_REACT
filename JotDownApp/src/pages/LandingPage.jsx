@@ -1,7 +1,6 @@
 import HeroSection from '../components/landing/HeroSection'
 import FeatureGrid from '../components/landing/FeatureGrid'
 import ThemeShowcase from '../components/landing/ThemeShowcase'
-import { features } from '../utils/constants'
 
 function LandingPage() {
   return (

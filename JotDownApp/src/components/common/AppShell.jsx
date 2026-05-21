@@ -5,9 +5,8 @@ import Footer from './Footer'
 function AppShell() {
   const location = useLocation()
   
-  // Fake state for UI demonstration
   const [isVerified, setIsVerified] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(false) // Toggle this to test logged in state
+  const [isLoggedIn, setIsLoggedIn] = useState(false) 
 
   const authPaths = ['/login', '/register', '/forgot-password', '/reset-password']
   const appPaths = ['/', '/landing', '/notes', '/profile', '/settings', ...authPaths]

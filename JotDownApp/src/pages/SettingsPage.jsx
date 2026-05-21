@@ -4,15 +4,12 @@ function SettingsPage() {
   const [theme, setTheme] = useState('light')
   const [fontSize, setFontSize] = useState('medium')
   const [noteColor, setNoteColor] = useState('default')
-  
-  // Password change state
-  const [currentPassword, setCurrentPassword] = useState('')
+    const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState('')
 
-  // Simulate applying theme (in a real app, this would be in a Context or useEffect at root level)
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark')
@@ -36,7 +33,6 @@ function SettingsPage() {
       return
     }
 
-    // Giả lập đổi mật khẩu thành công
     console.log('Đã cập nhật mật khẩu')
     setPasswordSuccess('Mật khẩu đã được thay đổi thành công.')
     setCurrentPassword('')
