@@ -5,8 +5,8 @@ export function useNoteWorkspace() {
   const [notes, setNotes] = useState(sampleNotes)
   const [selectedNoteId, setSelectedNoteId] = useState(notes[0]?.id || '')
 
-  const addNote = useCallback(() => {
-    const note = createEmptyNote()
+  const addNote = useCallback((extras = {}) => {
+    const note = createEmptyNote(extras)
     setNotes((current) => [note, ...current])
     setSelectedNoteId(note.id)
   }, [])

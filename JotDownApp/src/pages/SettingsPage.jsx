@@ -1,173 +1,224 @@
 import { useState, useEffect } from 'react'
+import { useToast } from '../components/common/Toast'
 
-function SettingsPage() {
+const NOTE_COLORS = [
+  { hex: '#ffffff', label: 'Trắng', cls: 'bg-white border-slate-300' },
+  { hex: '#FEF3C7', label: 'Vàng', cls: 'bg-amber-100' },
+  { hex: '#D1FAE5', label: 'Xanh lá', cls: 'bg-emerald-100' },
+  { hex: '#DBEAFE', label: 'Xanh dương', cls: 'bg-blue-100' },
+  { hex: '#FCE7F3', label: 'Hồng', cls: 'bg-pink-100' },
+  { hex: '#FFEDD5', label: 'Cam', cls: 'bg-orange-100' },
+  { hex: '#EDE9FE', label: 'Tím nhạt', cls: 'bg-violet-100' },
+]
+
+const FONT_SIZE_MAP = { small: '14px', medium: '16px', large: '18px' }
+
+function SettingSection({ title, description, children }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-card">
+      <div className="mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h2>
+        {description && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{description}</p>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+export default function SettingsPage() {
+  const { show } = useToast()
   const [theme, setTheme] = useState('light')
   const [fontSize, setFontSize] = useState('medium')
-  const [noteColor, setNoteColor] = useState('default')
-    const [currentPassword, setCurrentPassword] = useState('')
+  const [noteColor, setNoteColor] = useState('#ffffff')
+  const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
-  const [passwordError, setPasswordError] = useState('')
-  const [passwordSuccess, setPasswordSuccess] = useState('')
 
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
+    document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
+
+  useEffect(() => {
+    document.documentElement.style.fontSize = FONT_SIZE_MAP[fontSize]
+  }, [fontSize])
 
   const handlePasswordChange = (e) => {
     e.preventDefault()
-    setPasswordError('')
-    setPasswordSuccess('')
-
-    if (newPassword !== confirmNewPassword) {
-      setPasswordError('Mật khẩu mới không khớp.')
-      return
-    }
-    
-    if (!currentPassword) {
-      setPasswordError('Vui lòng nhập mật khẩu hiện tại.')
-      return
-    }
-
-    console.log('Đã cập nhật mật khẩu')
-    setPasswordSuccess('Mật khẩu đã được thay đổi thành công.')
+    if (!currentPassword) return show({ type: 'error', title: 'Lỗi', message: 'Vui lòng nhập mật khẩu hiện tại.' })
+    if (newPassword !== confirmNewPassword) return show({ type: 'error', title: 'Lỗi', message: 'Mật khẩu mới không khớp.' })
+    if (newPassword.length < 8) return show({ type: 'error', title: 'Lỗi', message: 'Mật khẩu mới phải có ít nhất 8 ký tự.' })
+    show({ type: 'success', title: 'Cập nhật thành công', message: 'Mật khẩu đã được thay đổi.' })
     setCurrentPassword('')
     setNewPassword('')
     setConfirmNewPassword('')
   }
 
+  const handleSaveAppearance = () => {
+    show({ type: 'success', title: 'Đã lưu', message: 'Tùy chỉnh giao diện đã được áp dụng.' })
+  }
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-12">
+    <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Cài đặt</h1>
-        <p className="mt-2 text-slate-600 dark:text-slate-400">Tùy chỉnh giao diện hiển thị và bảo mật tài khoản.</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Cài đặt</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Tùy chỉnh giao diện và bảo mật tài khoản của bạn.</p>
       </div>
 
-      <div className="grid gap-8 md:grid-cols-2">
-        {/* Appearance Settings */}
-        <section className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-8">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800 pb-4 mb-6">Hiển thị</h2>
-              
-              <div className="space-y-6">
-                {/* Theme Toggle */}
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Giao diện</label>
-                  <div className="flex gap-4">
-                    <label className={`flex-1 flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-colors ${theme === 'light' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
-                      <input type="radio" name="theme" value="light" className="hidden" checked={theme === 'light'} onChange={() => setTheme('light')} />
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                      <span className="text-sm font-medium dark:text-slate-200">Sáng</span>
-                    </label>
-                    <label className={`flex-1 flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-colors ${theme === 'dark' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
-                      <input type="radio" name="theme" value="dark" className="hidden" checked={theme === 'dark'} onChange={() => setTheme('dark')} />
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                      </svg>
-                      <span className="text-sm font-medium dark:text-slate-200">Tối</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Font Size */}
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Cỡ chữ (Ghi chú)</label>
-                  <select 
-                    value={fontSize} 
-                    onChange={(e) => setFontSize(e.target.value)}
-                    className="select select-bordered w-full bg-slate-50 dark:bg-slate-800 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  >
-                    <option value="small">Nhỏ</option>
-                    <option value="medium">Vừa (Mặc định)</option>
-                    <option value="large">Lớn</option>
-                  </select>
-                </div>
-
-                {/* Default Note Color */}
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Màu ghi chú mặc định</label>
-                  <div className="flex gap-3">
-                    {['default', 'red', 'yellow', 'green', 'blue', 'purple'].map((color) => (
-                      <button
-                        key={color}
-                        onClick={() => setNoteColor(color)}
-                        className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${
-                          noteColor === color ? 'border-primary ring-2 ring-primary/30 ring-offset-2 dark:ring-offset-slate-900' : 'border-transparent'
-                        } ${
-                          color === 'default' ? 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600' :
-                          color === 'red' ? 'bg-red-200 dark:bg-red-900/50' :
-                          color === 'yellow' ? 'bg-amber-200 dark:bg-amber-900/50' :
-                          color === 'green' ? 'bg-emerald-200 dark:bg-emerald-900/50' :
-                          color === 'blue' ? 'bg-sky-200 dark:bg-sky-900/50' :
-                          'bg-purple-200 dark:bg-purple-900/50'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
+      {/* ─── Appearance ─── */}
+      <SettingSection title="Giao diện" description="Tùy chỉnh cách JotDown hiển thị với bạn.">
+        <div className="space-y-6">
+          {/* Theme */}
+          <div>
+            <label className="form-label">Chủ đề màu sắc</label>
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              {[
+                { value: 'light', label: 'Sáng', icon: <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg> },
+                { value: 'dark', label: 'Tối', icon: <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg> },
+              ].map((t) => (
+                <label
+                  key={t.value}
+                  id={`theme-${t.value}-option`}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 cursor-pointer transition-all
+                    ${theme === t.value
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                    }`}
+                >
+                  <input type="radio" name="theme" value={t.value} className="sr-only" checked={theme === t.value} onChange={() => setTheme(t.value)} />
+                  {t.icon}
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{t.label}</span>
+                </label>
+              ))}
             </div>
           </div>
-        </section>
 
-        {/* Security Settings */}
-        <section className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800 pb-4 mb-6">Bảo mật</h2>
-            
-            <form onSubmit={handlePasswordChange} className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Mật khẩu hiện tại</label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="input input-bordered w-full bg-slate-50 dark:bg-slate-800 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Mật khẩu mới</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="input input-bordered w-full bg-slate-50 dark:bg-slate-800 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Xác nhận mật khẩu mới</label>
-                <input
-                  type="password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  className="input input-bordered w-full bg-slate-50 dark:bg-slate-800 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
-              {passwordSuccess && <p className="text-sm text-green-500">{passwordSuccess}</p>}
-
-              <button type="submit" className="btn btn-primary w-full mt-2">
-                Cập nhật mật khẩu
-              </button>
-            </form>
+          {/* Font size */}
+          <div>
+            <label className="form-label">Cỡ chữ ghi chú</label>
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              {[
+                { value: 'small', label: 'Nhỏ', preview: 'Aa' },
+                { value: 'medium', label: 'Vừa', preview: 'Aa' },
+                { value: 'large', label: 'Lớn', preview: 'Aa' },
+              ].map((f) => (
+                <button
+                  key={f.value}
+                  type="button"
+                  id={`font-${f.value}-btn`}
+                  onClick={() => setFontSize(f.value)}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 cursor-pointer transition-all
+                    ${fontSize === f.value
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                    }`}
+                >
+                  <span className={`font-bold leading-none ${f.value === 'small' ? 'text-base' : f.value === 'medium' ? 'text-xl' : 'text-2xl'}`}>{f.preview}</span>
+                  <span className="text-xs font-medium">{f.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </section>
-      </div>
+
+          {/* Note color */}
+          <div>
+            <label className="form-label">Màu ghi chú mặc định</label>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              {NOTE_COLORS.map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  id={`note-color-${c.label.toLowerCase()}-btn`}
+                  title={c.label}
+                  onClick={() => setNoteColor(c.hex)}
+                  className={`w-8 h-8 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 ${c.cls}
+                    ${noteColor === c.hex ? 'border-primary-500 ring-2 ring-primary-500/30 ring-offset-2 dark:ring-offset-slate-900' : 'border-transparent'}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button type="button" id="save-appearance-btn" onClick={handleSaveAppearance} className="btn-primary-custom">
+              Lưu cài đặt
+            </button>
+          </div>
+        </div>
+      </SettingSection>
+
+      {/* ─── Password ─── */}
+      <SettingSection title="Bảo mật" description="Thay đổi mật khẩu để bảo vệ tài khoản của bạn.">
+        <form onSubmit={handlePasswordChange} className="space-y-4">
+          <div>
+            <label htmlFor="current-password-input" className="form-label">Mật khẩu hiện tại</label>
+            <input
+              id="current-password-input"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="form-input"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="new-password-input" className="form-label">Mật khẩu mới</label>
+            <input
+              id="new-password-input"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="form-input"
+              placeholder="••••••••"
+              required
+              minLength={8}
+            />
+            <p className="text-xs text-slate-400 mt-1">Tối thiểu 8 ký tự.</p>
+          </div>
+          <div>
+            <label htmlFor="confirm-password-input" className="form-label">Xác nhận mật khẩu mới</label>
+            <input
+              id="confirm-password-input"
+              type="password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              className="form-input"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              id="change-password-btn"
+              className="btn-primary-custom"
+            >
+              Cập nhật mật khẩu
+            </button>
+          </div>
+        </form>
+      </SettingSection>
+
+      {/* ─── Notifications ─── */}
+      <SettingSection title="Thông báo" description="Quản lý cách bạn nhận thông báo từ JotDown.">
+        <div className="space-y-4">
+          {[
+            { id: 'notif-share', label: 'Khi có người chia sẻ ghi chú với bạn', defaultOn: true },
+            { id: 'notif-comment', label: 'Khi ghi chú của bạn bị báo cáo', defaultOn: true },
+            { id: 'notif-plan', label: 'Nhắc nhở khi gói dịch vụ sắp hết hạn', defaultOn: true },
+            { id: 'notif-news', label: 'Tin tức và cập nhật từ JotDown', defaultOn: false },
+          ].map((n) => (
+            <div key={n.id} className="flex items-center justify-between">
+              <label htmlFor={n.id} className="text-sm text-slate-700 dark:text-slate-300 cursor-pointer">{n.label}</label>
+              <input
+                id={n.id}
+                type="checkbox"
+                defaultChecked={n.defaultOn}
+                className="toggle toggle-primary toggle-sm"
+              />
+            </div>
+          ))}
+        </div>
+      </SettingSection>
     </div>
   )
 }
-
-export default SettingsPage

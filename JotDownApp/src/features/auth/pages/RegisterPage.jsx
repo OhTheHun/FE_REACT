@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.jsx'
 import AuthLayout from '../components/AuthLayout'
 import AuthHeader from '../components/AuthHeader'
@@ -8,22 +8,24 @@ import AuthButton from '../components/AuthButton'
 
 function RegisterPage() {
   const { login } = useAuth()
-  const navigate = useNavigate()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     if (password !== confirmPassword) {
       setError('Mật khẩu xác nhận không khớp.')
       return
     }
-    console.log('Mô phỏng băm mật khẩu bằng bcrypt...', password)
-    login({ email, password })
-    navigate('/notes')
+    try {
+      setError('')
+      await login({ email, password })
+    } catch (err) {
+      setError(err.message || 'Có lỗi xảy ra.')
+    }
   }
 
   return (

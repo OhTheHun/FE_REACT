@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../features/auth'
 
 function HeroSection() {
+  const { user } = useAuth()
+
   return (
     <section className="relative overflow-hidden bg-white dark:bg-slate-900 px-6 py-16 sm:px-12 sm:py-24">
       {/* Background gradients */}
