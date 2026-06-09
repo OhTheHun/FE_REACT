@@ -5,18 +5,20 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
       setPassword('')
       setConfirmPassword('')
       setError('')
+      setIsSubmitting(false)
     }
   }, [isOpen])
 
   if (!isOpen) return null
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
 
@@ -30,8 +32,17 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
       return
     }
 
-    onConfirm(password)
-    onClose()
+    setIsSubmitting(true)
+    try {
+      // onConfirm là async — chờ kết quả, nếu thành công mới đóng
+      await onConfirm(password)
+      onClose()
+    } catch (err) {
+      // Hiển thị lỗi từ API (vd: sai mật khẩu)
+      setError(err.message || 'Mật khẩu không đúng hoặc có lỗi xảy ra.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -45,7 +56,8 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            disabled={isSubmitting}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -57,6 +69,11 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
           {mode === 'lock' && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Đặt mật khẩu để bảo vệ ghi chú này. Bạn sẽ cần nhập mật khẩu này để đọc hoặc chỉnh sửa ghi chú trong tương lai.
+            </p>
+          )}
+          {mode === 'remove' && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Nhập mật khẩu hiện tại để xác nhận và gỡ bỏ bảo vệ ghi chú.
             </p>
           )}
 
@@ -71,6 +88,7 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
               placeholder="Nhập mật khẩu..."
               className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               autoFocus
+              disabled={isSubmitting}
             />
           </div>
 
@@ -85,12 +103,13 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Nhập lại mật khẩu..."
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                disabled={isSubmitting}
               />
             </div>
           )}
 
           {error && (
-            <div className="text-xs text-red-500 font-medium">
+            <div className="text-xs text-red-500 font-medium bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-xl border border-red-200 dark:border-red-800">
               ⚠️ {error}
             </div>
           )}
@@ -99,15 +118,23 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
             <button
               type="button"
               onClick={onClose}
-              className="btn-secondary-custom py-2 px-4 text-xs font-semibold"
+              disabled={isSubmitting}
+              className="btn-secondary-custom py-2 px-4 text-xs font-semibold disabled:opacity-60"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="btn-primary-custom py-2 px-4 text-xs font-semibold"
+              disabled={isSubmitting}
+              className="btn-primary-custom py-2 px-4 text-xs font-semibold disabled:opacity-60"
             >
-              {mode === 'lock' ? 'Bảo vệ' : mode === 'unlock' ? 'Mở khóa' : 'Gỡ khóa'}
+              {isSubmitting
+                ? 'Đang xử lý...'
+                : mode === 'lock'
+                ? 'Bảo vệ'
+                : mode === 'unlock'
+                ? 'Mở khóa'
+                : 'Gỡ khóa'}
             </button>
           </div>
         </form>

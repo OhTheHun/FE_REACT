@@ -1,21 +1,75 @@
-import { useState } from 'react'
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../components/common/Toast'
 import ConfirmModal from '../components/common/ConfirmModal'
+import {
+  createWorkspace,
+  createWorkspaceFolder,
+  deleteFolder,
+  deleteWorkspace,
+  fetchWorkspaceFolders,
+  fetchWorkspaces,
+  updateFolder,
+  updateWorkspace,
+} from '../features/workspaces/workspaceService'
 
 const WORKSPACE_ICONS = ['💼', '🏠', '🚀', '📚', '🎨', '💡', '🔬', '🎯']
+const WORKSPACES_PER_PAGE = 4
+const FOLDERS_PER_PAGE = 5
 
-function WorkspaceCard({ workspace, folders, isActive, onSelect, onRename, onDelete }) {
+function getWorkspaceIcon(workspace, index = 0) {
+  return workspace.icon || WORKSPACE_ICONS[index % WORKSPACE_ICONS.length]
+}
+
+function PaginationControls({ page, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null
+
+  return (
+    <div className="flex items-center justify-end gap-1.5 mt-4">
+      <button
+        type="button"
+        onClick={() => onPageChange(page - 1)}
+        disabled={page === 1}
+        className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+      >
+        Trước
+      </button>
+      {Array.from({ length: totalPages }, (_, index) => index + 1).map((item) => (
+        <button
+          key={item}
+          type="button"
+          onClick={() => onPageChange(item)}
+          className={`w-8 h-8 text-xs font-bold rounded-lg transition-colors
+            ${item === page
+              ? 'bg-primary-500 text-white'
+              : 'border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+        >
+          {item}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => onPageChange(page + 1)}
+        disabled={page === totalPages}
+        className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+      >
+        Sau
+      </button>
+    </div>
+  )
+}
+
+function WorkspaceCard({ workspace, folderCount, isActive, icon, onSelect, onRename, onDelete }) {
   const [isEditing, setIsEditing] = useState(false)
   const [nameValue, setNameValue] = useState(workspace.name)
 
-  const handleRenameSubmit = (e) => {
+  const handleRenameSubmit = async (e) => {
     e.preventDefault()
     if (!nameValue.trim()) return
-    onRename(workspace.id, nameValue.trim())
+    await onRename(workspace.id, nameValue.trim())
     setIsEditing(false)
   }
-
-  const folderCount = folders.filter((f) => f.workspace_id === workspace.id).length
 
   return (
     <div
@@ -32,10 +86,8 @@ function WorkspaceCard({ workspace, folders, isActive, onSelect, onRename, onDel
         </span>
       )}
 
-      {/* Icon */}
-      <div className="text-3xl mb-3">{workspace.icon || '💼'}</div>
+      <div className="text-3xl mb-3">{icon}</div>
 
-      {/* Name */}
       {isEditing ? (
         <form onSubmit={handleRenameSubmit} onClick={(e) => e.stopPropagation()}>
           <input
@@ -59,27 +111,79 @@ function WorkspaceCard({ workspace, folders, isActive, onSelect, onRename, onDel
         <>
           <h3 className="text-base font-bold text-slate-900 dark:text-white truncate mb-1">{workspace.name}</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-            {folderCount} thư mục • {workspace.type === 'share' ? 'Chia sẻ' : 'Cá nhân'}
+            {folderCount} thư mục • {workspace.notes_count || 0} ghi chú
           </p>
 
-          {/* Actions */}
           <div className="flex gap-2 mt-auto opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               onClick={() => { setIsEditing(true); setNameValue(workspace.name) }}
               className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
             >
-              ✏️ Đổi tên
+              Đổi tên
             </button>
-            {workspace.type !== 'personal' && (
-              <button
-                type="button"
-                onClick={() => onDelete(workspace.id)}
-                className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-              >
-                🗑️
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => onDelete(workspace.id)}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+              title="Xóa workspace"
+            >
+              Xóa
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function FolderCard({ folder, onRename, onDelete }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [nameValue, setNameValue] = useState(folder.name)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!nameValue.trim()) return
+    await onRename(folder.id, nameValue.trim())
+    setIsEditing(false)
+  }
+
+  return (
+    <div className="group flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 transition-all">
+      <span className="text-lg">📁</span>
+      {isEditing ? (
+        <form onSubmit={handleSubmit} className="flex flex-1 gap-2">
+          <input
+            type="text"
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            className="form-input py-1 text-xs"
+            autoFocus
+            onKeyDown={(e) => e.key === 'Escape' && setIsEditing(false)}
+          />
+          <button type="submit" className="btn-primary-custom py-1 px-2 text-xs">Lưu</button>
+        </form>
+      ) : (
+        <>
+          <div className="flex-1 min-w-0">
+            <span className="block text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{folder.name}</span>
+            <span className="text-xs text-slate-400">{folder.notes_count || 0} ghi chú</span>
+          </div>
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+            <button
+              type="button"
+              onClick={() => { setIsEditing(true); setNameValue(folder.name) }}
+              className="text-slate-400 hover:text-primary-500 transition-all text-xs font-semibold"
+            >
+              Sửa
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(folder.id)}
+              className="text-slate-400 hover:text-red-500 transition-all text-xs font-semibold"
+            >
+              Xóa
+            </button>
           </div>
         </>
       )}
@@ -89,79 +193,215 @@ function WorkspaceCard({ workspace, folders, isActive, onSelect, onRename, onDel
 
 export default function WorkspacesPage() {
   const { show } = useToast()
-  const [workspaces, setWorkspaces] = useState([
-    { id: 'ws-personal', name: 'Không gian cá nhân', type: 'personal', icon: '🏠' },
-    { id: 'ws-work', name: 'Công việc & Dự án', type: 'share', icon: '💼' },
-  ])
-  const [folders, setFolders] = useState([
-    { id: 'fold-1', name: 'Học tập', workspace_id: 'ws-personal' },
-    { id: 'fold-2', name: 'Ý tưởng', workspace_id: 'ws-personal' },
-    { id: 'fold-3', name: 'Kế hoạch', workspace_id: 'ws-work' },
-  ])
-  const [activeWsId, setActiveWsId] = useState('ws-personal')
+  const [workspaces, setWorkspaces] = useState([])
+  const [folders, setFolders] = useState([])
+  const [activeWsId, setActiveWsId] = useState('')
+  const [loadingWorkspaces, setLoadingWorkspaces] = useState(true)
+  const [loadingFolders, setLoadingFolders] = useState(false)
+  const [error, setError] = useState('')
+  const [workspacePage, setWorkspacePage] = useState(1)
+  const [workspaceSlideDirection, setWorkspaceSlideDirection] = useState('forward')
+  const [folderPage, setFolderPage] = useState(1)
+  const [folderSlideDirection, setFolderSlideDirection] = useState('forward')
+
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newDescription, setNewDescription] = useState('')
   const [selectedIcon, setSelectedIcon] = useState('💼')
   const [deleteTarget, setDeleteTarget] = useState(null)
 
-  // Folder state
   const [newFolderName, setNewFolderName] = useState('')
   const [isAddingFolder, setIsAddingFolder] = useState(false)
   const [deleteFolderTarget, setDeleteFolderTarget] = useState(null)
 
-  const activeWorkspace = workspaces.find((w) => w.id === activeWsId)
-  const activeFolders = folders.filter((f) => f.workspace_id === activeWsId)
+  const activeWorkspace = useMemo(
+    () => workspaces.find((workspace) => workspace.id === activeWsId),
+    [workspaces, activeWsId],
+  )
+  const workspaceTotalPages = Math.max(Math.ceil(workspaces.length / WORKSPACES_PER_PAGE), 1)
+  const folderTotalPages = Math.max(Math.ceil(folders.length / FOLDERS_PER_PAGE), 1)
+  const visibleWorkspaces = useMemo(() => {
+    const start = (workspacePage - 1) * WORKSPACES_PER_PAGE
+    return workspaces.slice(start, start + WORKSPACES_PER_PAGE)
+  }, [workspaces, workspacePage])
+  const visibleFolders = useMemo(() => {
+    const start = (folderPage - 1) * FOLDERS_PER_PAGE
+    return folders.slice(start, start + FOLDERS_PER_PAGE)
+  }, [folders, folderPage])
 
-  const handleCreateWorkspace = (e) => {
+  const loadWorkspaces = useCallback(async () => {
+    setLoadingWorkspaces(true)
+    setError('')
+
+    try {
+      const data = await fetchWorkspaces()
+      setWorkspaces(data)
+      setActiveWsId((current) => current || data[0]?.id || '')
+    } catch (err) {
+      setError(err.message || 'Không thể tải workspace.')
+    } finally {
+      setLoadingWorkspaces(false)
+    }
+  }, [])
+
+  const loadFolders = useCallback(async (workspaceId) => {
+    if (!workspaceId) {
+      setFolders([])
+      return
+    }
+
+    setLoadingFolders(true)
+    try {
+      const data = await fetchWorkspaceFolders(workspaceId)
+      setFolders(data)
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể tải thư mục.' })
+      setFolders([])
+    } finally {
+      setLoadingFolders(false)
+    }
+  }, [show])
+
+  useEffect(() => {
+    loadWorkspaces()
+  }, [loadWorkspaces])
+
+  useEffect(() => {
+    loadFolders(activeWsId)
+  }, [activeWsId, loadFolders])
+
+  useEffect(() => {
+    setWorkspacePage((current) => Math.min(current, workspaceTotalPages))
+  }, [workspaceTotalPages])
+
+  useEffect(() => {
+    setFolderPage(1)
+    setFolderSlideDirection('forward')
+  }, [activeWsId])
+
+  useEffect(() => {
+    setFolderPage((current) => Math.min(current, folderTotalPages))
+  }, [folderTotalPages])
+
+  const handleWorkspacePageChange = (nextPage) => {
+    if (nextPage < 1 || nextPage > workspaceTotalPages || nextPage === workspacePage) return
+    setWorkspaceSlideDirection(nextPage > workspacePage ? 'forward' : 'backward')
+    setWorkspacePage(nextPage)
+  }
+
+  const handleFolderPageChange = (nextPage) => {
+    if (nextPage < 1 || nextPage > folderTotalPages || nextPage === folderPage) return
+    setFolderSlideDirection(nextPage > folderPage ? 'forward' : 'backward')
+    setFolderPage(nextPage)
+  }
+
+  const handleCreateWorkspace = async (e) => {
     e.preventDefault()
     if (!newName.trim()) return
-    const newWs = {
-      id: `ws-${Date.now()}`,
-      name: newName.trim(),
-      type: 'personal',
-      icon: selectedIcon,
+
+    try {
+      const created = await createWorkspace({
+        name: newName.trim(),
+        description: newDescription.trim() || null,
+      })
+      const nextWorkspace = { ...created, icon: selectedIcon }
+      setWorkspaces((current) => [...current, nextWorkspace])
+      setWorkspaceSlideDirection('forward')
+      setWorkspacePage(Math.ceil((workspaces.length + 1) / WORKSPACES_PER_PAGE))
+      setActiveWsId(nextWorkspace.id)
+      setNewName('')
+      setNewDescription('')
+      setIsCreating(false)
+      show({ type: 'success', title: 'Đã tạo Workspace', message: `"${nextWorkspace.name}" đã sẵn sàng.` })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể tạo workspace.' })
     }
-    setWorkspaces([...workspaces, newWs])
-    setActiveWsId(newWs.id)
-    setNewName('')
-    setIsCreating(false)
-    show({ type: 'success', title: 'Đã tạo Workspace', message: `"${newWs.name}" đã sẵn sàng.` })
   }
 
-  const handleRenameWorkspace = (id, name) => {
-    setWorkspaces(workspaces.map((w) => (w.id === id ? { ...w, name } : w)))
-    show({ type: 'success', message: 'Đã đổi tên workspace.' })
+  const handleRenameWorkspace = async (id, name) => {
+    try {
+      const current = workspaces.find((workspace) => workspace.id === id)
+      const updated = await updateWorkspace(id, { name, description: current?.description })
+      setWorkspaces((items) => items.map((workspace) => (workspace.id === id ? { ...workspace, ...updated } : workspace)))
+      show({ type: 'success', message: 'Đã đổi tên workspace.' })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể đổi tên workspace.' })
+      throw err
+    }
   }
 
-  const handleDeleteWorkspace = () => {
-    const ws = workspaces.find((w) => w.id === deleteTarget)
-    setWorkspaces(workspaces.filter((w) => w.id !== deleteTarget))
-    setFolders(folders.filter((f) => f.workspace_id !== deleteTarget))
-    if (activeWsId === deleteTarget) setActiveWsId('ws-personal')
-    setDeleteTarget(null)
-    show({ type: 'info', message: `Đã xóa workspace "${ws?.name}".` })
+  const handleDeleteWorkspace = async () => {
+    const workspace = workspaces.find((item) => item.id === deleteTarget)
+    if (!deleteTarget) return
+
+    try {
+      await deleteWorkspace(deleteTarget)
+      const nextWorkspaces = workspaces.filter((item) => item.id !== deleteTarget)
+      setWorkspaces(nextWorkspaces)
+      if (activeWsId === deleteTarget) {
+        setActiveWsId(nextWorkspaces[0]?.id || '')
+      }
+      setDeleteTarget(null)
+      show({ type: 'info', message: `Đã xóa workspace "${workspace?.name}".` })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể xóa workspace.' })
+    }
   }
 
-  const handleAddFolder = (e) => {
+  const handleAddFolder = async (e) => {
     e.preventDefault()
-    if (!newFolderName.trim()) return
-    const newFolder = { id: `folder-${Date.now()}`, name: newFolderName.trim(), workspace_id: activeWsId }
-    setFolders([...folders, newFolder])
-    setNewFolderName('')
-    setIsAddingFolder(false)
-    show({ type: 'success', message: `Đã tạo thư mục "${newFolder.name}".` })
+    if (!newFolderName.trim() || !activeWsId) return
+
+    try {
+      const folder = await createWorkspaceFolder(activeWsId, { name: newFolderName.trim() })
+      setFolders((current) => [...current, folder])
+      setFolderSlideDirection('forward')
+      setFolderPage(Math.ceil((folders.length + 1) / FOLDERS_PER_PAGE))
+      setWorkspaces((current) => current.map((workspace) => (
+        workspace.id === activeWsId
+          ? { ...workspace, folders_count: (workspace.folders_count || 0) + 1 }
+          : workspace
+      )))
+      setNewFolderName('')
+      setIsAddingFolder(false)
+      show({ type: 'success', message: `Đã tạo thư mục "${folder.name}".` })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể tạo thư mục.' })
+    }
   }
 
-  const handleDeleteFolder = () => {
-    const f = folders.find((f) => f.id === deleteFolderTarget)
-    setFolders(folders.filter((fl) => fl.id !== deleteFolderTarget))
-    setDeleteFolderTarget(null)
-    show({ type: 'info', message: `Đã xóa thư mục "${f?.name}".` })
+  const handleRenameFolder = async (id, name) => {
+    try {
+      const folder = await updateFolder(id, { name })
+      setFolders((items) => items.map((item) => (item.id === id ? { ...item, ...folder } : item)))
+      show({ type: 'success', message: 'Đã đổi tên thư mục.' })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể đổi tên thư mục.' })
+      throw err
+    }
+  }
+
+  const handleDeleteFolder = async () => {
+    const folder = folders.find((item) => item.id === deleteFolderTarget)
+    if (!deleteFolderTarget) return
+
+    try {
+      await deleteFolder(deleteFolderTarget)
+      setFolders((items) => items.filter((item) => item.id !== deleteFolderTarget))
+      setWorkspaces((current) => current.map((workspace) => (
+        workspace.id === activeWsId
+          ? { ...workspace, folders_count: Math.max((workspace.folders_count || 1) - 1, 0) }
+          : workspace
+      )))
+      setDeleteFolderTarget(null)
+      show({ type: 'info', message: `Đã xóa thư mục "${folder?.name}".` })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể xóa thư mục.' })
+    }
   }
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Workspaces</h1>
@@ -182,12 +422,10 @@ export default function WorkspacesPage() {
         </button>
       </div>
 
-      {/* Create form */}
       {isCreating && (
         <div className="rounded-2xl border-2 border-primary-300 dark:border-primary-600 bg-primary-50 dark:bg-primary-900/20 p-5 animate-slide-up">
           <h3 className="font-bold text-slate-900 dark:text-white mb-4">Tạo không gian mới</h3>
           <form onSubmit={handleCreateWorkspace} className="flex flex-col gap-4">
-            {/* Icon picker */}
             <div>
               <label className="form-label">Biểu tượng</label>
               <div className="flex gap-2 flex-wrap">
@@ -218,6 +456,15 @@ export default function WorkspacesPage() {
                 autoFocus
               />
             </div>
+            <div>
+              <label className="form-label">Mô tả</label>
+              <textarea
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                placeholder="Mô tả ngắn cho workspace..."
+                className="form-input min-h-20"
+              />
+            </div>
             <div className="flex gap-3 justify-end">
               <button type="button" onClick={() => setIsCreating(false)} className="btn-secondary-custom">
                 Hủy
@@ -230,34 +477,64 @@ export default function WorkspacesPage() {
         </div>
       )}
 
-      {/* Workspace grid */}
       <div>
         <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
           Tất cả Workspaces ({workspaces.length})
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {workspaces.map((ws) => (
-            <WorkspaceCard
-              key={ws.id}
-              workspace={ws}
-              folders={folders}
-              isActive={ws.id === activeWsId}
-              onSelect={setActiveWsId}
-              onRename={handleRenameWorkspace}
-              onDelete={(id) => setDeleteTarget(id)}
+
+        {loadingWorkspaces ? (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-sm text-slate-500">
+            Đang tải workspace...
+          </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+            <p className="text-sm text-red-600">{error}</p>
+            <button type="button" onClick={loadWorkspaces} className="mt-3 text-xs text-primary-600 hover:underline">
+              Thử lại
+            </button>
+          </div>
+        ) : workspaces.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-sm text-slate-500">
+            Chưa có workspace nào.
+          </div>
+        ) : (
+          <>
+            <div
+              key={`workspace-page-${workspacePage}`}
+              className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 workspace-page-slide-${workspaceSlideDirection}`}
+            >
+              {visibleWorkspaces.map((workspace, index) => {
+                const absoluteIndex = (workspacePage - 1) * WORKSPACES_PER_PAGE + index
+                return (
+                  <WorkspaceCard
+                    key={workspace.id}
+                    workspace={workspace}
+                    folderCount={workspace.id === activeWsId ? folders.length : workspace.folders_count || 0}
+                    icon={getWorkspaceIcon(workspace, absoluteIndex)}
+                    isActive={workspace.id === activeWsId}
+                    onSelect={setActiveWsId}
+                    onRename={handleRenameWorkspace}
+                    onDelete={(id) => setDeleteTarget(id)}
+                  />
+                )
+              })}
+            </div>
+            <PaginationControls
+              page={workspacePage}
+              totalPages={workspaceTotalPages}
+              onPageChange={handleWorkspacePageChange}
             />
-          ))}
-        </div>
+          </>
+        )}
       </div>
 
-      {/* Active workspace folders */}
       {activeWorkspace && (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Đang xem</p>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>{activeWorkspace.icon}</span>
+                <span>{getWorkspaceIcon(activeWorkspace, workspaces.findIndex((item) => item.id === activeWorkspace.id))}</span>
                 <span>{activeWorkspace.name}</span>
               </h2>
             </div>
@@ -289,37 +566,38 @@ export default function WorkspacesPage() {
             </form>
           )}
 
-          {activeFolders.length === 0 ? (
+          {loadingFolders ? (
+            <div className="text-center py-10 text-sm text-slate-400">Đang tải thư mục...</div>
+          ) : folders.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-3xl mb-2">📁</p>
               <p className="text-sm text-slate-400 dark:text-slate-500">Chưa có thư mục nào trong workspace này.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {activeFolders.map((folder) => (
-                <div
-                  key={folder.id}
-                  className="group flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 transition-all"
-                >
-                  <span className="text-lg">📁</span>
-                  <span className="flex-1 text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{folder.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteFolderTarget(folder.id)}
-                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-all"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5-4h4M3 7h18" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
+            <>
+              <div
+                key={`folder-page-${activeWsId}-${folderPage}`}
+                className={`grid grid-cols-1 gap-3 workspace-page-slide-${folderSlideDirection}`}
+              >
+                {visibleFolders.map((folder) => (
+                  <FolderCard
+                    key={folder.id}
+                    folder={folder}
+                    onRename={handleRenameFolder}
+                    onDelete={(id) => setDeleteFolderTarget(id)}
+                  />
+                ))}
+              </div>
+              <PaginationControls
+                page={folderPage}
+                totalPages={folderTotalPages}
+                onPageChange={handleFolderPageChange}
+              />
+            </>
           )}
         </div>
       )}
 
-      {/* Delete workspace confirm */}
       <ConfirmModal
         isOpen={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
@@ -331,7 +609,6 @@ export default function WorkspacesPage() {
         cancelText="Hủy"
       />
 
-      {/* Delete folder confirm */}
       <ConfirmModal
         isOpen={deleteFolderTarget !== null}
         onClose={() => setDeleteFolderTarget(null)}

@@ -1,6 +1,8 @@
-import { useState } from 'react'
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect, useCallback } from 'react'
 import { useToast } from '../components/common/Toast'
 import ConfirmModal from '../components/common/ConfirmModal'
+import { fetchLabels, createLabel, updateLabel, deleteLabel } from '../features/notes/notesService'
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e',
@@ -29,35 +31,51 @@ function LabelBadge({ label, isActive, onClick }) {
 
 export default function LabelsPage() {
   const { show } = useToast()
-  const [labels, setLabels] = useState([
-    { id: 'lbl-1', name: 'Khẩn cấp', color: '#ef4444', noteCount: 3 },
-    { id: 'lbl-2', name: 'Quan trọng', color: '#eab308', noteCount: 7 },
-    { id: 'lbl-3', name: 'Tài liệu', color: '#3b82f6', noteCount: 12 },
-    { id: 'lbl-4', name: 'Học tập', color: '#22c55e', noteCount: 5 },
-    { id: 'lbl-5', name: 'Ý tưởng', color: '#8b5cf6', noteCount: 9 },
-  ])
+  const [labels, setLabels] = useState([])
+  const [loading, setLoading] = useState(true)
   const [activeLabel, setActiveLabel] = useState(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState('#3b82f6')
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  const handleCreate = (e) => {
+  // Load labels từ API
+  const loadLabels = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchLabels()
+      setLabels(data)
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể tải danh sách nhãn.' })
+    } finally {
+      setLoading(false)
+    }
+  }, [show])
+
+  useEffect(() => {
+    loadLabels()
+  }, [loadLabels])
+
+  const handleCreate = async (e) => {
     e.preventDefault()
     if (!newName.trim()) return
-    const newLabel = {
-      id: `lbl-${Date.now()}`,
-      name: newName.trim(),
-      color: newColor,
-      noteCount: 0,
+    setIsSaving(true)
+    try {
+      const created = await createLabel(newName.trim(), newColor)
+      setLabels((prev) => [...prev, created])
+      setNewName('')
+      setIsCreating(false)
+      show({ type: 'success', title: 'Đã tạo nhãn', message: `Nhãn "${created.name}" đã được tạo.` })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể tạo nhãn.' })
+    } finally {
+      setIsSaving(false)
     }
-    setLabels([...labels, newLabel])
-    setNewName('')
-    setIsCreating(false)
-    show({ type: 'success', title: 'Đã tạo nhãn', message: `Nhãn "${newLabel.name}" đã được tạo.` })
   }
 
   const handleStartEdit = (label) => {
@@ -66,20 +84,34 @@ export default function LabelsPage() {
     setEditColor(label.color)
   }
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault()
     if (!editName.trim()) return
-    setLabels(labels.map((l) => l.id === editingId ? { ...l, name: editName.trim(), color: editColor } : l))
-    setEditingId(null)
-    show({ type: 'success', message: 'Đã cập nhật nhãn.' })
+    try {
+      const updated = await updateLabel(editingId, { name: editName.trim(), color: editColor })
+      setLabels((prev) => prev.map((l) => l.id === editingId ? { ...l, ...updated } : l))
+      show({ type: 'success', message: 'Đã cập nhật nhãn.' })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể cập nhật nhãn.' })
+    } finally {
+      setEditingId(null)
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const label = labels.find((l) => l.id === deleteTarget)
-    setLabels(labels.filter((l) => l.id !== deleteTarget))
-    if (activeLabel === deleteTarget) setActiveLabel(null)
-    setDeleteTarget(null)
-    show({ type: 'info', message: `Đã xóa nhãn "${label?.name}".` })
+    setIsDeleting(true)
+    try {
+      await deleteLabel(deleteTarget)
+      setLabels((prev) => prev.filter((l) => l.id !== deleteTarget))
+      if (activeLabel === deleteTarget) setActiveLabel(null)
+      show({ type: 'info', message: `Đã xóa nhãn "${label?.name}".` })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể xóa nhãn.' })
+    } finally {
+      setIsDeleting(false)
+      setDeleteTarget(null)
+    }
   }
 
   return (
@@ -110,7 +142,9 @@ export default function LabelsPage() {
         <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">
           Tất cả nhãn ({labels.length})
         </h2>
-        {labels.length === 0 ? (
+        {loading ? (
+          <p className="text-sm text-slate-400 text-center py-6">Đang tải nhãn...</p>
+        ) : labels.length === 0 ? (
           <div className="text-center py-10">
             <p className="text-3xl mb-2">🏷️</p>
             <p className="text-sm text-slate-400 dark:text-slate-500">Chưa có nhãn nào. Hãy tạo nhãn đầu tiên!</p>
@@ -173,7 +207,9 @@ export default function LabelsPage() {
             </div>
             <div className="flex gap-3 justify-end">
               <button type="button" onClick={() => setIsCreating(false)} className="btn-secondary-custom">Hủy</button>
-              <button type="submit" className="btn-primary-custom">Tạo nhãn</button>
+              <button type="submit" disabled={isSaving} className="btn-primary-custom disabled:opacity-60">
+                {isSaving ? 'Đang tạo...' : 'Tạo nhãn'}
+              </button>
             </div>
           </form>
         </div>
@@ -239,7 +275,9 @@ export default function LabelsPage() {
                   )}
                 </td>
                 <td>
-                  <span className="text-slate-500 dark:text-slate-400">{label.noteCount} ghi chú</span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    {label.notes_count != null ? label.notes_count : '—'} ghi chú
+                  </span>
                 </td>
                 <td className="text-right">
                   <div className="flex items-center justify-end gap-2">
@@ -275,7 +313,7 @@ export default function LabelsPage() {
         title="Xóa nhãn"
         message="Nhãn này sẽ bị xóa khỏi tất cả các ghi chú. Bạn có chắc không?"
         variant="danger"
-        confirmText="Xóa"
+        confirmText={isDeleting ? 'Đang xóa...' : 'Xóa'}
         cancelText="Hủy"
       />
     </div>

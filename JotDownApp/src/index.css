@@ -230,6 +230,24 @@ body {
   animation: slideInRight 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+@keyframes workspacePageForward {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes workspacePageBackward {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.workspace-page-slide-forward {
+  animation: workspacePageForward 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.workspace-page-slide-backward {
+  animation: workspacePageBackward 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* ========== NO SCROLLBAR (for filter tabs) ========== */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

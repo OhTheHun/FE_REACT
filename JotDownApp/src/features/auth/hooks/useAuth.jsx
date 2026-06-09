@@ -1,11 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getRoleHomePath,
   loginWithCredentials,
   logoutUser,
   registerWithCredentials,
 } from '../services/authService'
+import { apiFetch } from '../../../services/api'
 
 const AuthContext = createContext(null)
 const FONT_SIZE_MAP = { small: '14px', medium: '16px', large: '18px' }
@@ -26,6 +27,7 @@ function isJwtTokenUsable(token) {
 }
 
 export function AuthProvider({ children }) {
+  const hydratedProfileKeyRef = useRef('')
   const [token, setToken] = useState(() => {
     try {
       return localStorage.getItem('jotdown_token')
@@ -64,17 +66,34 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  const refreshUserProfile = useCallback(async (baseUser) => {
+    if (!baseUser?.id) return { user: baseUser }
+
+    const payload = await apiFetch(`/api/users/${baseUser.id}/profile`)
+    const body = payload?.data || payload || {}
+    const profileUser = body.user || body
+    const nextUser = {
+      ...baseUser,
+      ...profileUser,
+      CreatedTime: profileUser?.CreatedTime || profileUser?.created_at,
+    }
+
+    saveSession({ user: nextUser })
+    return { user: nextUser, stats: body.stats || body.statistics }
+  }, [saveSession])
+
   const login = useCallback(async (payload) => {
     try {
       const result = await loginWithCredentials(payload)
       saveSession(result)
+      const profileResult = await refreshUserProfile(result.user)
       setAuthError('')
-      return result
+      return { ...result, user: profileResult.user }
     } catch (error) {
       setAuthError(error.message)
       throw error
     }
-  }, [saveSession])
+  }, [refreshUserProfile, saveSession])
 
   const register = useCallback(async (payload) => {
     try {
@@ -82,8 +101,9 @@ export function AuthProvider({ children }) {
 
       if (result.user && result.token) {
         saveSession(result)
+        const profileResult = await refreshUserProfile(result.user)
         setAuthError('')
-        return result
+        return { ...result, user: profileResult.user }
       }
 
       return login({ email: payload.email, password: payload.password })
@@ -91,7 +111,7 @@ export function AuthProvider({ children }) {
       setAuthError(error.message)
       throw error
     }
-  }, [login, saveSession])
+  }, [login, refreshUserProfile, saveSession])
 
   const logout = useCallback(async () => {
     await logoutUser()
@@ -110,6 +130,18 @@ export function AuthProvider({ children }) {
     window.addEventListener('jotdown:auth-invalid', handleInvalidAuth)
     return () => window.removeEventListener('jotdown:auth-invalid', handleInvalidAuth)
   }, [logout])
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id || !token) return
+
+    const hydrationKey = `${user.id}:${token}`
+    if (hydratedProfileKeyRef.current === hydrationKey) return
+    hydratedProfileKeyRef.current = hydrationKey
+
+    refreshUserProfile(user).catch(() => {
+      hydratedProfileKeyRef.current = ''
+    })
+  }, [isAuthenticated, refreshUserProfile, token, user])
 
   const updateUser = useCallback((data) => {
     setUser((current) => {

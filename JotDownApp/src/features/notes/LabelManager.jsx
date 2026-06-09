@@ -16,10 +16,11 @@ export default function LabelManager({ isOpen, onClose, labels = [], onAddLabel,
   const { show } = useToast()
   const [newLabelName, setNewLabelName] = useState('')
   const [newLabelColor, setNewLabelColor] = useState('#3b82f6')
+  const [isCreating, setIsCreating] = useState(false)
 
   if (!isOpen) return null
 
-  const handleCreate = (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault()
     if (!newLabelName.trim()) return
 
@@ -28,13 +29,24 @@ export default function LabelManager({ isOpen, onClose, labels = [], onAddLabel,
       return
     }
 
-    onAddLabel({
-      id: `label-${Date.now()}`,
-      name: newLabelName.trim(),
-      color: newLabelColor,
-    })
-    setNewLabelName('')
-    show({ type: 'success', message: 'Đã tạo nhãn mới thành công' })
+    setIsCreating(true)
+    try {
+      await onAddLabel({ name: newLabelName.trim(), color: newLabelColor })
+      setNewLabelName('')
+      show({ type: 'success', message: 'Đã tạo nhãn mới thành công' })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể tạo nhãn.' })
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    try {
+      await onDeleteLabel(id)
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể xóa nhãn.' })
+    }
   }
 
   return (
@@ -70,9 +82,10 @@ export default function LabelManager({ isOpen, onClose, labels = [], onAddLabel,
               />
               <button
                 type="submit"
-                className="btn-primary-custom py-1.5 px-3 text-xs font-semibold"
+                disabled={isCreating}
+                className="btn-primary-custom py-1.5 px-3 text-xs font-semibold disabled:opacity-60"
               >
-                Tạo
+                {isCreating ? '...' : 'Tạo'}
               </button>
             </div>
             {/* Color picker */}
@@ -106,10 +119,13 @@ export default function LabelManager({ isOpen, onClose, labels = [], onAddLabel,
                     <span className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: l.color }} />
                       <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{l.name}</span>
+                      {l.notes_count != null && (
+                        <span className="text-[10px] text-slate-400">({l.notes_count})</span>
+                      )}
                     </span>
                     <button
                       type="button"
-                      onClick={() => onDeleteLabel(l.id)}
+                      onClick={() => handleDelete(l.id)}
                       className="text-slate-400 hover:text-red-500 transition-colors p-1"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

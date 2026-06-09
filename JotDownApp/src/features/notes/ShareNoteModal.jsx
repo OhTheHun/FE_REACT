@@ -1,52 +1,60 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react'
 import { useToast } from '../../components/common/Toast'
+import { shareNote, addCollaborator } from './notesService'
 
 export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) {
   const { show } = useToast()
   const [visibility, setVisibility] = useState(note?.visibility || 'private')
-  const [collaborators, setCollaborators] = useState([
-    { email: 'collab1@example.com', role: 'viewer' },
-    { email: 'collab2@example.com', role: 'editor' },
-  ])
+  const [shareUrl, setShareUrl] = useState(note?.share_url || '')
   const [newCollab, setNewCollab] = useState('')
-  const [collabRole, setCollabRole] = useState('viewer')
+  const [collabRole, setCollabRole] = useState('view')
+  const [isSaving, setIsSaving] = useState(false)
+  const [isAddingCollab, setIsAddingCollab] = useState(false)
 
   useEffect(() => {
     if (note) {
       setVisibility(note.visibility || 'private')
+      setShareUrl(note.share_url || '')
     }
   }, [note])
 
   if (!isOpen || !note) return null
 
   const handleCopyLink = () => {
-    const shareUrl = `${window.location.origin}/shared/note/${note.id}`
-    navigator.clipboard.writeText(shareUrl)
+    const url = shareUrl || `${window.location.origin}/shared/${note.id}`
+    navigator.clipboard.writeText(url)
     show({ type: 'success', title: 'Đã sao chép liên kết chia sẻ' })
   }
 
-  const handleAddCollaborator = (e) => {
+  const handleSaveVisibility = async () => {
+    setIsSaving(true)
+    try {
+      const result = await shareNote(note.id, visibility)
+      if (result.share_url) setShareUrl(result.share_url)
+      onUpdateNote({ ...note, visibility, share_url: result.share_url })
+      show({ type: 'success', message: 'Đã cập nhật chế độ hiển thị ghi chú' })
+      onClose()
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể cập nhật chế độ hiển thị.' })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleAddCollaborator = async (e) => {
     e.preventDefault()
     if (!newCollab.trim()) return
-    if (collaborators.some((c) => c.email === newCollab.trim())) {
-      show({ type: 'warning', message: 'Người dùng này đã nằm trong danh sách chia sẻ' })
-      return
+    setIsAddingCollab(true)
+    try {
+      await addCollaborator(note.id, newCollab.trim(), collabRole)
+      show({ type: 'success', message: `Đã chia sẻ với ${newCollab.trim()}` })
+      setNewCollab('')
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể chia sẻ ghi chú.' })
+    } finally {
+      setIsAddingCollab(false)
     }
-    setCollaborators([...collaborators, { email: newCollab.trim(), role: collabRole }])
-    setNewCollab('')
-    show({ type: 'success', message: `Đã thêm ${newCollab.trim()} làm người xem/chỉnh sửa` })
-  }
-
-  const handleRemoveCollaborator = (email) => {
-    setCollaborators(collaborators.filter((c) => c.email !== email))
-    show({ type: 'info', message: 'Đã xóa người chia sẻ' })
-  }
-
-  const handleSaveVisibility = () => {
-    onUpdateNote({ ...note, visibility })
-    show({ type: 'success', message: 'Đã cập nhật chế độ hiển thị ghi chú' })
-    onClose()
   }
 
   return (
@@ -55,7 +63,7 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
           <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <span>👥</span>
-            Chia sẻ ghi chú: "{note.title}"
+            Chia sẻ ghi chú: &quot;{note.title}&quot;
           </h3>
           <button
             type="button"
@@ -74,10 +82,9 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
               Chế độ hiển thị
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {[
                 { value: 'private', label: 'Riêng tư', desc: 'Chỉ mình bạn xem', icon: '🔒' },
-                { value: 'shared', label: 'Chia sẻ nhóm', desc: 'Những người được chọn', icon: '👥' },
                 { value: 'public', label: 'Công khai', desc: 'Ai có link đều xem được', icon: '🌐' },
               ].map((opt) => (
                 <button
@@ -98,12 +105,14 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
             </div>
           </div>
 
-          {/* Public Link option if public */}
+          {/* Public share link */}
           {visibility === 'public' && (
             <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Đường dẫn công khai</p>
-                <p className="text-xs text-slate-400 truncate mt-0.5">{window.location.origin}/shared/note/{note.id}</p>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  {shareUrl || `${window.location.origin}/shared/${note.id}`}
+                </p>
               </div>
               <button
                 type="button"
@@ -115,63 +124,36 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
             </div>
           )}
 
-          {/* Shared Collaborators list if Shared */}
-          {visibility === 'shared' && (
-            <div className="space-y-3">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-                Thành viên chia sẻ
-              </label>
-
-              {/* Add collaborator form */}
-              <form onSubmit={handleAddCollaborator} className="flex gap-2">
-                <input
-                  type="email"
-                  value={newCollab}
-                  onChange={(e) => setNewCollab(e.target.value)}
-                  placeholder="Nhập email người dùng..."
-                  className="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                />
-                <select
-                  value={collabRole}
-                  onChange={(e) => setCollabRole(e.target.value)}
-                  className="text-xs px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-                >
-                  <option value="viewer">Đọc (Viewer)</option>
-                  <option value="editor">Sửa (Editor)</option>
-                </select>
-                <button
-                  type="submit"
-                  className="btn-primary-custom px-4 text-xs font-semibold"
-                >
-                  Thêm
-                </button>
-              </form>
-
-              {/* Collaborators list */}
-              <div className="max-h-[140px] overflow-y-auto space-y-1.5 pr-1">
-                {collaborators.map((c) => (
-                  <div key={c.email} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-900">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-primary-500"></span>
-                      <span className="text-xs text-slate-700 dark:text-slate-300 truncate">{c.email}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 capitalize">
-                        {c.role === 'editor' ? 'Chỉnh sửa' : 'Chỉ xem'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveCollaborator(c.email)}
-                      className="text-slate-400 hover:text-red-500 transition-colors p-1"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Chia sẻ riêng theo email */}
+          <div className="space-y-3">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+              Chia sẻ với người dùng cụ thể
+            </label>
+            <form onSubmit={handleAddCollaborator} className="flex gap-2">
+              <input
+                type="email"
+                value={newCollab}
+                onChange={(e) => setNewCollab(e.target.value)}
+                placeholder="Nhập email người dùng..."
+                className="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
+              <select
+                value={collabRole}
+                onChange={(e) => setCollabRole(e.target.value)}
+                className="text-xs px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+              >
+                <option value="view">Đọc</option>
+                <option value="edit">Chỉnh sửa</option>
+              </select>
+              <button
+                type="submit"
+                disabled={isAddingCollab}
+                className="btn-primary-custom px-4 text-xs font-semibold disabled:opacity-60"
+              >
+                {isAddingCollab ? '...' : 'Mời'}
+              </button>
+            </form>
+          </div>
 
           <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
             <button
@@ -184,9 +166,10 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
             <button
               type="button"
               onClick={handleSaveVisibility}
-              className="btn-primary-custom py-2 px-4 text-xs font-semibold"
+              disabled={isSaving}
+              className="btn-primary-custom py-2 px-4 text-xs font-semibold disabled:opacity-60"
             >
-              Lưu thay đổi
+              {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
             </button>
           </div>
         </div>

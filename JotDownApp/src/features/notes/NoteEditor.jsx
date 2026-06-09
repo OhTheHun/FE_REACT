@@ -14,7 +14,15 @@ const NOTE_COLORS = [
   { hex: '#EDE9FE', label: 'Tím nhạt', class: 'bg-violet-100' },
 ]
 
-export default function NoteEditor({ note, onSave, allLabels = [] }) {
+export default function NoteEditor({
+  note,
+  onSave,
+  allLabels = [],
+  onNoteUpdated,
+  onTogglePin,
+  onToggleFavorite,
+  onUpdateProtection,
+}) {
   const { show } = useToast()
   const [title, setTitle] = useState(note?.title || '')
   const [content, setContent] = useState(note?.content || '')
@@ -27,9 +35,10 @@ export default function NoteEditor({ note, onSave, allLabels = [] }) {
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
-  const [passwordModalMode, setPasswordModalMode] = useState('lock') // 'lock' | 'unlock' | 'remove'
+  const [passwordModalMode, setPasswordModalMode] = useState('lock') // 'lock' | 'remove'
 
   const [isDirty, setIsDirty] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
   const autoSaveTimer = useRef(null)
 
@@ -44,31 +53,45 @@ export default function NoteEditor({ note, onSave, allLabels = [] }) {
     setNoteLabels(note?.labels || [])
     setIsProtected(note?.is_protected || false)
     setIsDirty(false)
+    setIsSaving(false)
   }, [note?.id])
 
-  const save = useCallback(() => {
-    if (!note || !title.trim()) return
-    onSave?.({
-      ...note,
-      title,
-      content,
-      color,
-      is_pinned: isPinned,
-      is_favorite: isFavorite,
-      visibility,
-      labels: noteLabels,
-      is_protected: isProtected,
-    })
-    setIsDirty(false)
-    setLastSaved(new Date())
-  }, [note, title, content, color, isPinned, isFavorite, visibility, noteLabels, isProtected, onSave])
+  const save = useCallback(async () => {
+    if (!note || !title.trim() || isSaving) return false
+
+    setIsSaving(true)
+
+    try {
+      const saved = await onSave?.({
+        ...note,
+        title,
+        content,
+        color,
+        is_pinned: isPinned,
+        is_favorite: isFavorite,
+        visibility,
+        labels: noteLabels,
+        is_protected: isProtected,
+      })
+      setIsDirty(false)
+      setLastSaved(new Date())
+      if (saved) setVisibility(saved.visibility || visibility)
+      return true
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể lưu ghi chú.' })
+      return false
+    } finally {
+      setIsSaving(false)
+    }
+  }, [note, title, content, color, isPinned, isFavorite, visibility, noteLabels, isProtected, isSaving, onSave, show])
 
   // Auto-save with debounce
   useEffect(() => {
     if (!isDirty) return
     clearTimeout(autoSaveTimer.current)
-    autoSaveTimer.current = setTimeout(() => {
-      save()
+    autoSaveTimer.current = setTimeout(async () => {
+      const saved = await save()
+      if (!saved) return
       show({ type: 'success', message: 'Tự động lưu thành công' })
     }, 1500)
     return () => clearTimeout(autoSaveTimer.current)
@@ -79,17 +102,50 @@ export default function NoteEditor({ note, onSave, allLabels = [] }) {
     setIsDirty(true)
   }
 
-  const handlePasswordConfirm = (password) => {
-    if (passwordModalMode === 'lock') {
-      setIsProtected(true)
-      onSave?.({ ...note, is_protected: true, password })
-      show({ type: 'success', message: 'Đã khóa bảo vệ ghi chú này' })
-    } else if (passwordModalMode === 'remove') {
-      setIsProtected(false)
-      onSave?.({ ...note, is_protected: false, password: null })
-      show({ type: 'info', message: 'Đã gỡ bỏ khóa bảo vệ' })
+  // --- Pin: gọi API riêng, không qua auto-save chung ---
+  const handleTogglePin = async () => {
+    if (!note) return
+    const next = !isPinned
+    setIsPinned(next)
+    try {
+      const saved = await onTogglePin?.(note.id, next)
+      if (saved) setIsPinned(Boolean(saved.is_pinned))
+      show({ type: 'success', message: next ? 'Đã ghim ghi chú' : 'Đã bỏ ghim ghi chú' })
+      onNoteUpdated?.()
+    } catch (err) {
+      setIsPinned(!next)
+      show({ type: 'error', message: err.message || 'Không thể cập nhật trạng thái ghim.' })
     }
-    setIsDirty(true)
+  }
+
+  // --- Favorite: gọi API riêng ---
+  const handleToggleFavorite = async () => {
+    if (!note) return
+    const next = !isFavorite
+    setIsFavorite(next)
+    try {
+      const saved = await onToggleFavorite?.(note.id, next)
+      if (saved) setIsFavorite(Boolean(saved.is_favorite))
+      show({ type: 'success', message: next ? 'Đã thêm vào yêu thích' : 'Đã bỏ yêu thích' })
+      onNoteUpdated?.()
+    } catch (err) {
+      setIsFavorite(!next)
+      show({ type: 'error', message: err.message || 'Không thể cập nhật yêu thích.' })
+    }
+  }
+
+  // --- Protection: throw lỗi lên NotePasswordModal để hiển thị inline ---
+  const handlePasswordConfirm = async (password) => {
+    if (!note) return
+    const next = passwordModalMode === 'lock'
+    // Không try/catch ở đây — để lỗi nổi lên NotePasswordModal (sai mật khẩu, v.v.)
+    const saved = await onUpdateProtection?.(note.id, next, password)
+    setIsProtected(Boolean(saved?.is_protected ?? next))
+    show({
+      type: next ? 'success' : 'info',
+      message: next ? 'Đã khóa bảo vệ ghi chú này' : 'Đã gỡ bỏ khóa bảo vệ',
+    })
+    onNoteUpdated?.()
   }
 
   const handleToggleLabel = (labelId) => {
@@ -126,7 +182,7 @@ export default function NoteEditor({ note, onSave, allLabels = [] }) {
         <button
           type="button"
           id="editor-pin-btn"
-          onClick={() => { setIsPinned(!isPinned); setIsDirty(true) }}
+          onClick={handleTogglePin}
           title={isPinned ? 'Bỏ ghim' : 'Ghim ghi chú'}
           className={`p-2 rounded-xl transition-colors cursor-pointer ${isPinned ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400'}`}
         >
@@ -139,7 +195,7 @@ export default function NoteEditor({ note, onSave, allLabels = [] }) {
         <button
           type="button"
           id="editor-favorite-btn"
-          onClick={() => { setIsFavorite(!isFavorite); setIsDirty(true) }}
+          onClick={handleToggleFavorite}
           title={isFavorite ? 'Bỏ yêu thích' : 'Yêu thích'}
           className={`p-2 rounded-xl transition-colors cursor-pointer ${isFavorite ? 'bg-red-100 dark:bg-red-900/30 text-red-500' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400'}`}
         >
@@ -203,9 +259,10 @@ export default function NoteEditor({ note, onSave, allLabels = [] }) {
             type="button"
             id="editor-save-btn"
             onClick={save}
+            disabled={isSaving}
             className="btn-primary-custom py-1.5 text-xs"
           >
-            Lưu
+            {isSaving ? 'Đang lưu...' : 'Lưu'}
           </button>
         </div>
       </div>
@@ -258,10 +315,10 @@ export default function NoteEditor({ note, onSave, allLabels = [] }) {
       <ShareNoteModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        note={note}
+        note={{ ...note, visibility }}
         onUpdateNote={(updatedNote) => {
           setVisibility(updatedNote.visibility)
-          onSave?.(updatedNote)
+          onNoteUpdated?.()
         }}
       />
 

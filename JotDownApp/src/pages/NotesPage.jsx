@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import NoteCard from '../features/notes/NoteCard'
 import NoteEditor from '../features/notes/NoteEditor'
 import ConfirmModal from '../components/common/ConfirmModal'
@@ -6,6 +7,20 @@ import WorkspaceSidebar from '../features/notes/WorkspaceSidebar'
 import LabelManager from '../features/notes/LabelManager'
 import { useNoteWorkspace } from '../hooks/useNoteWorkspace'
 import { useToast } from '../components/common/Toast'
+import {
+  fetchFolders,
+  deleteFolder as deleteFolderApi,
+  fetchLabels,
+  createLabel as createLabelApi,
+  deleteLabel as deleteLabelApi,
+} from '../features/notes/notesService'
+import {
+  createWorkspaceFolder,
+  fetchWorkspaceFolders,
+  fetchWorkspaces,
+} from '../features/workspaces/workspaceService'
+
+const ALL_WORKSPACES = { id: '', name: 'Tất cả không gian' }
 
 const FILTER_OPTIONS = [
   { value: 'all', label: 'Tất cả' },
@@ -16,28 +31,18 @@ const FILTER_OPTIONS = [
 ]
 
 export default function NotesPage() {
-  const { notes, selectedNoteId, setSelectedNoteId, addNote, deleteNote, updateNote } = useNoteWorkspace()
   const { show } = useToast()
 
-  // Workspaces, folders, labels mock state
-  const [workspaces, setWorkspaces] = useState([
-    { id: 'ws-personal', name: 'Không gian cá nhân', type: 'personal' },
-    { id: 'ws-work', name: 'Công việc & Dự án', type: 'share' },
-  ])
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState('ws-personal')
+  // Workspaces (giữ state cục bộ vì workspace API có thể phát triển riêng)
+  const [workspaces, setWorkspaces] = useState([])
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState('')
 
-  const [folders, setFolders] = useState([
-    { id: 'fold-1', name: 'Học tập', workspace_id: 'ws-personal' },
-    { id: 'fold-2', name: 'Ý tưởng', workspace_id: 'ws-personal' },
-    { id: 'fold-3', name: 'Kế hoạch', workspace_id: 'ws-work' },
-  ])
+  // Folders — load từ API
+  const [folders, setFolders] = useState([])
   const [activeFolderId, setActiveFolderId] = useState(null)
 
-  const [labels, setLabels] = useState([
-    { id: 'lbl-1', name: 'Khẩn cấp', color: '#ef4444' },
-    { id: 'lbl-2', name: 'Quan trọng', color: '#eab308' },
-    { id: 'lbl-3', name: 'Tài liệu', color: '#3b82f6' },
-  ])
+  // Labels — load từ API
+  const [labels, setLabels] = useState([])
   const [activeLabelId, setActiveLabelId] = useState(null)
 
   const [isTrashActive, setIsTrashActive] = useState(false)
@@ -50,118 +55,174 @@ export default function NotesPage() {
   const [view, setView] = useState('list') // 'list' | 'grid'
   const [deleteTarget, setDeleteTarget] = useState(null)
 
-  // Clear filters
+  // --- Load Folders từ API ---
+  const loadWorkspaces = useCallback(async () => {
+    try {
+      const data = await fetchWorkspaces()
+      setWorkspaces(data)
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Khong the tai danh sach workspace.' })
+    }
+  }, [show])
+
+  const loadFolders = useCallback(async () => {
+    try {
+      const data = activeWorkspaceId
+        ? await fetchWorkspaceFolders(activeWorkspaceId)
+        : await fetchFolders()
+      setFolders(data)
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Khong the tai danh sach thu muc.' })
+    }
+  }, [activeWorkspaceId, show])
+
+  // --- Load Labels từ API ---
+  const loadLabels = useCallback(async () => {
+    try {
+      const data = await fetchLabels()
+      setLabels(data)
+    } catch (err) {
+      console.error('Không thể tải danh sách nhãn:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadWorkspaces()
+  }, [loadWorkspaces])
+
+  useEffect(() => {
+    loadFolders()
+  }, [loadFolders])
+
+  useEffect(() => {
+    loadLabels()
+  }, [loadLabels])
+
+  // --- Build bộ lọc để truyền sang API ---
+  const apiFilters = useMemo(() => {
+    const params = {}
+
+    if (activeWorkspaceId && !isTrashActive) {
+      params.workspace_id = activeWorkspaceId
+    }
+    if (activeFolderId && !isTrashActive) {
+      params.folder_id = activeFolderId
+    }
+    if (activeLabelId && !isTrashActive) {
+      params.label_id = activeLabelId
+    }
+    if (search.trim()) {
+      params.search = search.trim()
+    }
+    if (filter === 'pinned') params.is_pinned = true
+    if (filter === 'favorite') params.is_favorite = true
+    if (filter === 'private') params.visibility = 'private'
+    if (filter === 'public') params.visibility = 'public'
+
+    return params
+  }, [activeWorkspaceId, activeFolderId, activeLabelId, search, filter, isTrashActive])
+
+  const {
+    notes,
+    selectedNoteId,
+    setSelectedNoteId,
+    addNote,
+    deleteNote,
+    updateNote,
+    updatePinStatus,
+    updateFavoriteStatus,
+    updateProtectionStatus,
+    loading,
+    error,
+    refreshNotes,
+  } =
+    useNoteWorkspace(apiFilters)
+
+  // Sắp xếp: ghim lên đầu (client-side sort nhẹ)
+  const filteredNotes = useMemo(() => {
+    return [...notes].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0))
+  }, [notes])
+
+  const selectedNote = useMemo(() => {
+    return notes.find((n) => n.id === selectedNoteId) || filteredNotes[0]
+  }, [notes, selectedNoteId, filteredNotes])
+
+  // --- Clear filters ---
   const handleClearFilters = () => {
     setActiveFolderId(null)
     setActiveLabelId(null)
     setIsTrashActive(false)
+    setSearch('')
+    setFilter('all')
   }
 
-  // Active Workspace action
-  const handleAddWorkspace = (newWs) => {
-    setWorkspaces([...workspaces, newWs])
-    setActiveWorkspaceId(newWs.id)
-    handleClearFilters()
-    show({ type: 'success', message: `Đã tạo không gian "${newWs.name}"` })
+  // --- Folder actions (qua API) ---
+  const handleAddFolder = async (folderData) => {
+    if (!activeWorkspaceId) {
+      show({ type: 'warning', message: 'Hãy chọn workspace trước khi tạo thư mục.' })
+      return false
+    }
+
+    try {
+      const newFolder = await createWorkspaceFolder(activeWorkspaceId, { name: folderData.name })
+      setFolders((prev) => [...prev, newFolder])
+      setActiveFolderId(newFolder.id)
+      setIsTrashActive(false)
+      show({ type: 'success', message: `Đã tạo thư mục "${newFolder.name}"` })
+      return newFolder
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Không thể tạo thư mục.' })
+      return false
+    }
   }
 
-  // Active Folder actions
-  const handleAddFolder = (newFolder) => {
-    setFolders([...folders, newFolder])
-    setActiveFolderId(newFolder.id)
-    setIsTrashActive(false)
-    show({ type: 'success', message: `Đã tạo thư mục "${newFolder.name}"` })
-  }
-
-  const handleDeleteFolder = (folderId) => {
-    setFolders(folders.filter(f => f.id !== folderId))
+  const handleDeleteFolder = async (folderId) => {
+    await deleteFolderApi(folderId)
+    setFolders((prev) => prev.filter((f) => f.id !== folderId))
     if (activeFolderId === folderId) {
       setActiveFolderId(null)
     }
     show({ type: 'info', message: 'Đã xóa thư mục' })
   }
 
-  // Labels actions
-  const handleAddLabel = (newLbl) => {
-    setLabels([...labels, newLbl])
+  // --- Label actions (qua API) ---
+  const handleAddLabel = async (newLbl) => {
+    const created = await createLabelApi(newLbl.name, newLbl.color)
+    setLabels((prev) => [...prev, created])
   }
 
-  const handleDeleteLabel = (lblId) => {
-    setLabels(labels.filter(l => l.id !== lblId))
+  const handleDeleteLabel = async (lblId) => {
+    await deleteLabelApi(lblId)
+    setLabels((prev) => prev.filter((l) => l.id !== lblId))
     if (activeLabelId === lblId) {
       setActiveLabelId(null)
     }
   }
 
-  // Filtered + searched notes
-  const filteredNotes = useMemo(() => {
-    let result = notes
-
-    // Filter by Workspace
-    result = result.filter(
-      (n) => n.workspace_id === activeWorkspaceId || (!n.workspace_id && activeWorkspaceId === 'ws-personal')
-    )
-
-    // Filter by Trash status
-    if (isTrashActive) {
-      result = result.filter((n) => n.deleteFlag === true)
-    } else {
-      result = result.filter((n) => !n.deleteFlag)
+  // --- Note actions ---
+  const handleAddNote = async () => {
+    try {
+      await addNote({
+        workspace_id: activeWorkspaceId,
+        folder_id: activeFolderId,
+        labels: activeLabelId ? [activeLabelId] : [],
+      })
+      show({ type: 'success', title: 'Đã tạo ghi chú mới' })
+    } catch (err) {
+      show({ type: 'error', title: 'Lỗi khi tạo ghi chú', message: err.message || 'Không thể tạo ghi chú mới.' })
     }
-
-    // Filter by folder
-    if (activeFolderId && !isTrashActive) {
-      result = result.filter((n) => n.folder_id === activeFolderId)
-    }
-
-    // Filter by label
-    if (activeLabelId && !isTrashActive) {
-      result = result.filter((n) => n.labels && n.labels.includes(activeLabelId))
-    }
-
-    // Filter by search query
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      result = result.filter(
-        (n) => n.title?.toLowerCase().includes(q) || n.content?.toLowerCase().includes(q),
-      )
-    }
-
-    // Secondary Tab Filters
-    if (filter === 'pinned') result = result.filter((n) => n.is_pinned)
-    if (filter === 'favorite') result = result.filter((n) => n.is_favorite)
-    if (filter === 'private') result = result.filter((n) => n.visibility === 'private' || !n.visibility)
-    if (filter === 'public') result = result.filter((n) => n.visibility === 'public')
-
-    // Pinned first
-    return [...result].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0))
-  }, [notes, activeWorkspaceId, isTrashActive, activeFolderId, activeLabelId, search, filter])
-
-  const selectedNote = useMemo(() => {
-    return notes.find((n) => n.id === selectedNoteId) || filteredNotes[0]
-  }, [notes, selectedNoteId, filteredNotes])
-
-  const handleAddNote = () => {
-    addNote({
-      workspace_id: activeWorkspaceId,
-      folder_id: activeFolderId,
-      labels: activeLabelId ? [activeLabelId] : [],
-      deleteFlag: false,
-    })
-    show({ type: 'success', title: 'Đã tạo ghi chú mới' })
   }
 
-  const handleDeleteNote = (id) => {
-    // Check if it's already in Trash, then delete permanently. Otherwise put in Trash.
-    const noteToDelete = notes.find((n) => n.id === id)
-    if (noteToDelete?.deleteFlag) {
-      deleteNote(id)
-      show({ type: 'error', title: 'Đã xóa vĩnh viễn ghi chú' })
-    } else {
-      updateNote({ ...noteToDelete, deleteFlag: true })
-      show({ type: 'info', title: 'Đã chuyển vào thùng rác' })
-    }
+  const handleDeleteNote = async (id) => {
+    await deleteNote(id)
+    show({ type: 'error', title: 'Đã xóa ghi chú' })
     setDeleteTarget(null)
+  }
+
+  // Khi save note trong editor, refresh nhẹ state
+  const handleUpdateNote = async (updatedNote) => {
+    const saved = await updateNote(updatedNote)
+    return saved
   }
 
   return (
@@ -169,13 +230,12 @@ export default function NotesPage() {
       {/* Workspace Sidebar */}
       {showWorkspaceSidebar && (
         <WorkspaceSidebar
-          workspaces={workspaces}
+          workspaces={[ALL_WORKSPACES, ...workspaces]}
           activeWorkspaceId={activeWorkspaceId}
           onSelectWorkspace={(id) => {
             setActiveWorkspaceId(id)
             handleClearFilters()
           }}
-          onAddWorkspace={handleAddWorkspace}
           folders={folders}
           activeFolderId={activeFolderId}
           onSelectFolder={(id) => {
@@ -183,7 +243,7 @@ export default function NotesPage() {
             setActiveLabelId(null)
             setIsTrashActive(false)
           }}
-          onAddFolder={handleAddFolder}
+          onAddFolder={(data) => handleAddFolder({ ...data, workspace_id: activeWorkspaceId })}
           onDeleteFolder={handleDeleteFolder}
           labels={labels}
           activeLabelId={activeLabelId}
@@ -225,7 +285,11 @@ export default function NotesPage() {
                 {isTrashActive ? 'Thùng rác' : activeFolderId ? 'Thư mục' : 'Workspace'}
               </p>
               <h1 className="text-lg font-bold text-slate-900 dark:text-white truncate max-w-[120px]">
-                {isTrashActive ? 'Đã xóa' : activeFolderId ? folders.find(f => f.id === activeFolderId)?.name : workspaces.find(w => w.id === activeWorkspaceId)?.name}
+                {isTrashActive
+                  ? 'Đã xóa'
+                  : activeFolderId
+                  ? folders.find((f) => f.id === activeFolderId)?.name
+                  : [ALL_WORKSPACES, ...workspaces].find((w) => w.id === activeWorkspaceId)?.name}
               </h1>
             </div>
           </div>
@@ -306,7 +370,22 @@ export default function NotesPage() {
 
         {/* Note list */}
         <div className={`flex-1 overflow-y-auto px-3 pb-4 ${view === 'grid' ? 'grid grid-cols-1 gap-2 content-start' : 'space-y-0.5'}`}>
-          {filteredNotes.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">Đang tải ghi chú...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+              <p className="text-xs font-semibold text-red-500">{error}</p>
+              <button
+                type="button"
+                onClick={refreshNotes}
+                className="mt-3 text-xs text-primary-500 hover:underline cursor-pointer"
+              >
+                Thử lại
+              </button>
+            </div>
+          ) : filteredNotes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center px-4">
               <svg className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -337,8 +416,12 @@ export default function NotesPage() {
           <NoteEditor
             key={selectedNote?.id || 'empty'}
             note={selectedNote}
-            onSave={updateNote}
+            onSave={handleUpdateNote}
             allLabels={labels}
+            onNoteUpdated={refreshNotes}
+            onTogglePin={updatePinStatus}
+            onToggleFavorite={updateFavoriteStatus}
+            onUpdateProtection={updateProtectionStatus}
           />
         </div>
       </div>
@@ -358,7 +441,7 @@ export default function NotesPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => handleDeleteNote(deleteTarget)}
         title={isTrashActive ? "Xóa vĩnh viễn" : "Xóa ghi chú"}
-        message={isTrashActive ? "Hành động này không thể khôi phục. Bạn có chắc chắn muốn xóa vĩnh viễn?" : "Ghi chú sẽ được chuyển vào thùng rác. Bạn có thể khôi phục từ Thùng rác."}
+        message={isTrashActive ? "Hành động này không thể khôi phục. Bạn có chắc chắn muốn xóa vĩnh viễn?" : "Ghi chú sẽ bị xóa. Bạn có chắc chắn không?"}
         variant="danger"
         confirmText="Xóa"
         cancelText="Hủy"
