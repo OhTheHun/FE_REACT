@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import { useToast } from '../../components/common/Toast'
+import { useAuth } from '../auth'
 
 const ADMIN_NAV = [
   {
@@ -72,6 +73,7 @@ export default function AdminLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { show } = useToast()
+  const { logout } = useAuth()
   const [showLogout, setShowLogout] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try {
@@ -89,7 +91,8 @@ export default function AdminLayout() {
     })
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout()
     show({ type: 'success', title: 'Đăng xuất thành công' })
     setTimeout(() => navigate('/login'), 400)
   }

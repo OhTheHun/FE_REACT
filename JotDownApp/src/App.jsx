@@ -11,6 +11,7 @@ import NotFoundPage from './pages/NotFoundPage'
 import { ToastProvider } from './components/common/Toast'
 import {
   AuthProvider,
+  AuthGuard,
   LoginPage,
   RegisterPage,
   ForgotPasswordPage,
@@ -42,12 +43,12 @@ function App() {
             <Route path="/" element={<AppShell />}>
               <Route index element={<Navigate to="/landing" replace />} />
               <Route path="landing" element={<LandingPage />} />
-              <Route path="notes" element={<NotesPage />} />
+              <Route path="notes" element={<AuthGuard allowedRoles={['user']}><NotesPage /></AuthGuard>} />
               <Route path="shared-notes" element={<SharedNotesGalleryPage />} />
-              <Route path="workspaces" element={<WorkspacesPage />} />
-              <Route path="labels" element={<LabelsPage />} />
-              <Route path="profile" element={<ProfilePage />} />
-              <Route path="settings" element={<SettingsPage />} />
+              <Route path="workspaces" element={<AuthGuard allowedRoles={['user']}><WorkspacesPage /></AuthGuard>} />
+              <Route path="labels" element={<AuthGuard allowedRoles={['user']}><LabelsPage /></AuthGuard>} />
+              <Route path="profile" element={<AuthGuard allowedRoles={['user']}><ProfilePage /></AuthGuard>} />
+              <Route path="settings" element={<AuthGuard allowedRoles={['user']}><SettingsPage /></AuthGuard>} />
               <Route path="plans" element={<PlansPage />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
@@ -57,7 +58,7 @@ function App() {
             </Route>
 
             {/* Admin Workspace */}
-            <Route path="/admin" element={<AdminLayout />}>
+            <Route path="/admin" element={<AuthGuard allowedRoles={['admin']}><AdminLayout /></AuthGuard>}>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="plans" element={<AdminPlans />} />

@@ -4,6 +4,7 @@ import AuthLayout from '../components/AuthLayout'
 import AuthHeader from '../components/AuthHeader'
 import AuthInput from '../components/AuthInput'
 import AuthButton from '../components/AuthButton'
+import { requestPasswordResetOtp } from '../services/authService'
 
 function SuccessCard({ email, onRetry, onContinue }) {
   return (
@@ -16,11 +17,11 @@ function SuccessCard({ email, onRetry, onContinue }) {
         </div>
         <h2 className="text-2xl font-bold text-white">Kiểm tra email của bạn</h2>
         <p className="auth-muted-text mt-4 text-slate-600 dark:text-slate-400">
-          Chúng tôi đã gửi liên kết và mã OTP đến <strong>{email}</strong> để đặt lại mật khẩu.
+          Chúng tôi đã gửi mã OTP đến <strong>{email}</strong> để đặt lại mật khẩu.
         </p>
         <div className="mt-8 space-y-4">
           <AuthButton type="button" onClick={onContinue}>Nhập mã OTP</AuthButton>
-          <AuthButton type="button" variant="ghost" onClick={onRetry}>Thử lại email khác</AuthButton>
+          <AuthButton type="button" variant="ghost" onClick={onRetry}>Thử email khác</AuthButton>
         </div>
       </div>
     </AuthLayout>
@@ -30,19 +31,30 @@ function SuccessCard({ email, onRetry, onContinue }) {
 function ForgotPasswordPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
+  const [error, setError] = useState('')
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    console.log('Đã gửi email khôi phục mật khẩu đến', email)
-    setIsSubmitted(true)
+    setIsSubmitting(true)
+    setError('')
+
+    try {
+      await requestPasswordResetOtp({ email })
+      setIsSubmitted(true)
+    } catch (err) {
+      setError(err.message || 'Không thể gửi OTP.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (isSubmitted) {
     return (
       <SuccessCard
         email={email}
-        onContinue={() => navigate('/reset-password')}
+        onContinue={() => navigate('/reset-password', { state: { email } })}
         onRetry={() => setIsSubmitted(false)}
       />
     )
@@ -52,7 +64,7 @@ function ForgotPasswordPage() {
     <AuthLayout>
       <AuthHeader
         title="Quên mật khẩu?"
-        subtitle="Nhập email để nhận hướng dẫn đặt lại mật khẩu."
+        subtitle="Nhập email để nhận mã OTP đặt lại mật khẩu."
       />
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -66,13 +78,17 @@ function ForgotPasswordPage() {
           placeholder="name@example.com"
         />
 
-        <AuthButton type="submit">Gửi liên kết khôi phục</AuthButton>
+        {error && <p className="text-sm text-red-400 text-center">{error}</p>}
+
+        <AuthButton type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Đang gửi OTP...' : 'Gửi OTP'}
+        </AuthButton>
       </form>
 
       <p className="auth-muted-text mt-8 text-center text-sm text-slate-600 dark:text-slate-400">
         Nhớ mật khẩu của bạn?{' '}
         <Link to="/login" className="auth-accent-link font-semibold text-primary hover:underline">
-          Quay lại Đăng nhập
+          Quay lại đăng nhập
         </Link>
       </p>
     </AuthLayout>

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
 
 function HeroSection() {
-  const { user } = useAuth()
+  const { isAuthenticated } = useAuth()
 
   return (
     <section className="relative overflow-hidden bg-white dark:bg-slate-900 px-6 py-16 sm:px-12 sm:py-24">
@@ -18,11 +18,13 @@ function HeroSection() {
           <p className="text-lg text-slate-600 dark:text-slate-400 leading-relaxed">
             JotDown is the minimal, distraction-free personal workspace designed to help you capture ideas, organize knowledge, and focus on what truly matters.
           </p>
-          <div className="flex flex-wrap gap-4 pt-4">
-            <Link to="/register" className="bg-blue-700 hover:bg-blue-800 text-white rounded-md px-6 py-3 font-medium shadow-md transition-colors">
-              Get Started for Free
-            </Link>
-          </div>
+          {!isAuthenticated && (
+            <div className="flex flex-wrap gap-4 pt-4">
+              <Link to="/register" className="bg-blue-700 hover:bg-blue-800 text-white rounded-md px-6 py-3 font-medium shadow-md transition-colors">
+                Get Started for Free
+              </Link>
+            </div>
+          )}
         </div>
         
         {/* Mockup UI container */}

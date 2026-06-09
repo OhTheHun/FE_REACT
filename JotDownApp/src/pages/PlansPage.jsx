@@ -202,9 +202,18 @@ function PaymentModal({ plan, onClose, onConfirm }) {
 export default function PlansPage() {
   const navigate = useNavigate()
   const { show } = useToast()
-  const { user, updateUser } = useAuth()
+  const { user, isAuthenticated, updateUser } = useAuth()
   const [payingPlan, setPayingPlan] = useState(null)
   const currentPlanId = user?.plan_id
+
+  const handleUpgrade = (plan) => {
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: { pathname: '/plans' } } })
+      return
+    }
+
+    setPayingPlan(plan)
+  }
 
   const handleConfirmPayment = (method) => {
     if (payingPlan) {
@@ -240,7 +249,7 @@ export default function PlansPage() {
             key={plan.id}
             plan={plan}
             currentPlanId={currentPlanId}
-            onUpgrade={setPayingPlan}
+            onUpgrade={handleUpgrade}
           />
         ))}
       </div>

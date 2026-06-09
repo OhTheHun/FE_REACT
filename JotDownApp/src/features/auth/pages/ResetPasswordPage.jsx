@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 import AuthHeader from '../components/AuthHeader'
 import AuthInput from '../components/AuthInput'
 import AuthButton from '../components/AuthButton'
+import { verifyPasswordResetOtp } from '../services/authService'
 
 function SuccessCard({ onGoLogin }) {
   return (
@@ -16,10 +17,10 @@ function SuccessCard({ onGoLogin }) {
         </div>
         <h2 className="text-2xl font-bold text-white">Đặt lại mật khẩu thành công</h2>
         <p className="auth-muted-text mt-4 text-slate-600 dark:text-slate-400">
-          Mật khẩu của bạn đã được cập nhật. Bạn có thể sử dụng mật khẩu mới để đăng nhập ngay bây giờ.
+          Mật khẩu của bạn đã được cập nhật. Bạn có thể đăng nhập bằng mật khẩu mới.
         </p>
         <div className="mt-8">
-          <AuthButton type="button" onClick={onGoLogin}>Quay lại Đăng nhập</AuthButton>
+          <AuthButton type="button" onClick={onGoLogin}>Quay lại đăng nhập</AuthButton>
         </div>
       </div>
     </AuthLayout>
@@ -28,20 +29,38 @@ function SuccessCard({ onGoLogin }) {
 
 function ResetPasswordPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [email, setEmail] = useState(location.state?.email || '')
   const [otp, setOtp] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    if (password !== confirmPassword) {
-      setError('Mật khẩu xác nhận không khớp.')
+
+    if (!/^\d{6}$/.test(otp)) {
+      setError('OTP phải đúng 6 chữ số.')
       return
     }
-    console.log('Đặt lại mật khẩu thành công với OTP:', otp)
-    setSuccess(true)
+
+    if (password.length < 8) {
+      setError('Mật khẩu tối thiểu 8 ký tự.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setError('')
+
+    try {
+      await verifyPasswordResetOtp({ email, otp, password })
+      setSuccess(true)
+    } catch (err) {
+      setError(err.message || 'Không thể đặt lại mật khẩu.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (success) {
@@ -52,17 +71,29 @@ function ResetPasswordPage() {
     <AuthLayout>
       <AuthHeader
         title="Tạo mật khẩu mới"
-        subtitle="Nhập mã OTP đã nhận và mật khẩu mới của bạn."
+        subtitle="Nhập email, mã OTP đã nhận và mật khẩu mới của bạn."
       />
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <AuthInput
+          id="reset-email"
+          label="Email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="name@example.com"
+        />
+
+        <AuthInput
           id="reset-otp"
           label="Mã OTP"
           type="text"
+          inputMode="numeric"
+          pattern="[0-9]{6}"
           required
           value={otp}
-          onChange={(e) => setOtp(e.target.value)}
+          onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
           placeholder="123456"
           maxLength={6}
           style={{ textAlign: 'center', letterSpacing: '0.2em', fontFamily: 'monospace', fontSize: '1.125rem' }}
@@ -73,24 +104,17 @@ function ResetPasswordPage() {
           label="Mật khẩu mới"
           type="password"
           required
+          minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
         />
 
-        <AuthInput
-          id="reset-confirm-password"
-          label="Xác nhận mật khẩu mới"
-          type="password"
-          required
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          placeholder="••••••••"
-        />
-
         {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 
-        <AuthButton type="submit">Cập nhật mật khẩu</AuthButton>
+        <AuthButton type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}
+        </AuthButton>
       </form>
     </AuthLayout>
   )

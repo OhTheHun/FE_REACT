@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.jsx'
 import AuthLayout from '../components/AuthLayout'
 import AuthHeader from '../components/AuthHeader'
@@ -7,24 +7,36 @@ import AuthInput from '../components/AuthInput'
 import AuthButton from '../components/AuthButton'
 
 function RegisterPage() {
-  const { login } = useAuth()
-  const [name, setName] = useState('')
+  const navigate = useNavigate()
+  const { register, authError, getRoleHomePath } = useAuth()
+  const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (password !== confirmPassword) {
-      setError('Mật khẩu xác nhận không khớp.')
+
+    if (password.length < 8) {
+      setError('Mật khẩu tối thiểu 8 ký tự.')
       return
     }
+
+    setIsSubmitting(true)
+    setError('')
+
     try {
-      setError('')
-      await login({ email, password })
+      const result = await register({
+        display_name: displayName,
+        email,
+        password,
+      })
+      navigate(getRoleHomePath(result.user), { replace: true })
     } catch (err) {
       setError(err.message || 'Có lỗi xảy ra.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -38,8 +50,8 @@ function RegisterPage() {
           label="Tên hiển thị"
           type="text"
           required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
           placeholder="Ví dụ: Nguyễn Văn A"
         />
 
@@ -58,24 +70,17 @@ function RegisterPage() {
           label="Mật khẩu"
           type="password"
           required
+          minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
         />
 
-        <AuthInput
-          id="register-confirm-password"
-          label="Xác nhận mật khẩu"
-          type="password"
-          required
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          placeholder="••••••••"
-        />
+        {(error || authError) && <p className="text-sm text-red-400 text-center">{error || authError}</p>}
 
-        {error && <p className="text-sm text-red-400 text-center">{error}</p>}
-
-        <AuthButton type="submit">Đăng ký</AuthButton>
+        <AuthButton type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Đang đăng ký...' : 'Đăng ký'}
+        </AuthButton>
       </form>
 
       <p className="auth-muted-text mt-8 text-center text-sm text-slate-600 dark:text-slate-400">

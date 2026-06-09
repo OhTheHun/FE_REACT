@@ -2,6 +2,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import ConfirmModal from './ConfirmModal'
 import { useToast } from './Toast'
+import { useAuth } from '../../features/auth'
 
 const NAV_ITEMS = [
   {
@@ -83,6 +84,7 @@ const BOTTOM_ITEMS = [
 export default function Sidebar({ user, isAdmin = false }) {
   const navigate = useNavigate()
   const { show } = useToast()
+  const { logout } = useAuth()
   const [showLogout, setShowLogout] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try {
@@ -100,7 +102,8 @@ export default function Sidebar({ user, isAdmin = false }) {
     })
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout()
     show({ type: 'success', title: 'Đăng xuất thành công', message: 'Hẹn gặp lại bạn!' })
     setTimeout(() => navigate('/login'), 500)
   }

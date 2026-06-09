@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useToast } from '../components/common/Toast'
+import { useAuth } from '../features/auth'
+import { apiFetch } from '../services/api'
 
 const NOTE_COLORS = [
   { hex: '#ffffff', label: 'Trắng', cls: 'bg-white border-slate-300' },
@@ -25,36 +27,76 @@ function SettingSection({ title, description, children }) {
   )
 }
 
-export default function SettingsPage() {
+function SettingsContent({ user, updateUser }) {
   const { show } = useToast()
-  const [theme, setTheme] = useState('light')
-  const [fontSize, setFontSize] = useState('medium')
-  const [noteColor, setNoteColor] = useState('#ffffff')
+  const userId = user?.id
+  const [theme, setTheme] = useState(user?.theme || 'light')
+  const [fontSize, setFontSize] = useState(user?.font_size || 'medium')
+  const [noteColor, setNoteColor] = useState(user?.default_note_color || '#ffffff')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [savingAppearance, setSavingAppearance] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
+    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches
+    document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && prefersDark))
   }, [theme])
 
   useEffect(() => {
-    document.documentElement.style.fontSize = FONT_SIZE_MAP[fontSize]
+    document.documentElement.style.fontSize = FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.medium
   }, [fontSize])
 
-  const handlePasswordChange = (e) => {
-    e.preventDefault()
-    if (!currentPassword) return show({ type: 'error', title: 'Lỗi', message: 'Vui lòng nhập mật khẩu hiện tại.' })
-    if (newPassword !== confirmNewPassword) return show({ type: 'error', title: 'Lỗi', message: 'Mật khẩu mới không khớp.' })
-    if (newPassword.length < 8) return show({ type: 'error', title: 'Lỗi', message: 'Mật khẩu mới phải có ít nhất 8 ký tự.' })
-    show({ type: 'success', title: 'Cập nhật thành công', message: 'Mật khẩu đã được thay đổi.' })
-    setCurrentPassword('')
-    setNewPassword('')
-    setConfirmNewPassword('')
+  const handleSaveAppearance = async () => {
+    if (!userId) return
+
+    setSavingAppearance(true)
+    try {
+      const payload = await apiFetch(`/api/users/${userId}/settings/appearance`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          theme,
+          font_size: fontSize,
+          default_note_color: noteColor,
+        }),
+      })
+      const nextSettings = payload.settings || { theme, font_size: fontSize, default_note_color: noteColor }
+      updateUser(nextSettings)
+      show({ type: 'success', title: 'Đã lưu', message: payload.message || 'Tùy chỉnh giao diện đã được áp dụng.' })
+    } catch (err) {
+      show({ type: 'error', title: 'Lỗi', message: err.message || 'Không thể lưu cài đặt giao diện.' })
+    } finally {
+      setSavingAppearance(false)
+    }
   }
 
-  const handleSaveAppearance = () => {
-    show({ type: 'success', title: 'Đã lưu', message: 'Tùy chỉnh giao diện đã được áp dụng.' })
+  const handlePasswordChange = async (e) => {
+    e.preventDefault()
+
+    if (!userId) return
+    if (!currentPassword) return show({ type: 'error', title: 'Lỗi', message: 'Vui lòng nhập mật khẩu hiện tại.' })
+    if (newPassword.length < 8) return show({ type: 'error', title: 'Lỗi', message: 'Mật khẩu mới phải có ít nhất 8 ký tự.' })
+    if (newPassword !== confirmNewPassword) return show({ type: 'error', title: 'Lỗi', message: 'Mật khẩu mới không khớp.' })
+
+    setSavingPassword(true)
+    try {
+      const payload = await apiFetch(`/api/users/${userId}/password`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          current_password: currentPassword,
+          password: newPassword,
+        }),
+      })
+      show({ type: 'success', title: 'Cập nhật thành công', message: payload.message || 'Mật khẩu đã được thay đổi.' })
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+    } catch (err) {
+      show({ type: 'error', title: 'Lỗi', message: err.message || 'Không thể đổi mật khẩu.' })
+    } finally {
+      setSavingPassword(false)
+    }
   }
 
   return (
@@ -64,35 +106,33 @@ export default function SettingsPage() {
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Tùy chỉnh giao diện và bảo mật tài khoản của bạn.</p>
       </div>
 
-      {/* ─── Appearance ─── */}
       <SettingSection title="Giao diện" description="Tùy chỉnh cách JotDown hiển thị với bạn.">
         <div className="space-y-6">
-          {/* Theme */}
           <div>
             <label className="form-label">Chủ đề màu sắc</label>
-            <div className="grid grid-cols-2 gap-3 mt-2">
+            <div className="grid grid-cols-3 gap-3 mt-2">
               {[
-                { value: 'light', label: 'Sáng', icon: <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg> },
-                { value: 'dark', label: 'Tối', icon: <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg> },
+                { value: 'light', label: 'Sáng' },
+                { value: 'dark', label: 'Tối' },
+                { value: 'system', label: 'Hệ thống' },
               ].map((t) => (
-                <label
+                <button
                   key={t.value}
+                  type="button"
                   id={`theme-${t.value}-option`}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 cursor-pointer transition-all
+                  onClick={() => setTheme(t.value)}
+                  className={`p-4 rounded-2xl border-2 cursor-pointer transition-all text-sm font-medium
                     ${theme === t.value
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
                     }`}
                 >
-                  <input type="radio" name="theme" value={t.value} className="sr-only" checked={theme === t.value} onChange={() => setTheme(t.value)} />
-                  {t.icon}
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{t.label}</span>
-                </label>
+                  {t.label}
+                </button>
               ))}
             </div>
           </div>
 
-          {/* Font size */}
           <div>
             <label className="form-label">Cỡ chữ ghi chú</label>
             <div className="grid grid-cols-3 gap-2 mt-2">
@@ -119,7 +159,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Note color */}
           <div>
             <label className="form-label">Màu ghi chú mặc định</label>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -127,7 +166,7 @@ export default function SettingsPage() {
                 <button
                   key={c.hex}
                   type="button"
-                  id={`note-color-${c.label.toLowerCase()}-btn`}
+                  id={`note-color-${c.hex.replace('#', '')}-btn`}
                   title={c.label}
                   onClick={() => setNoteColor(c.hex)}
                   className={`w-8 h-8 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 ${c.cls}
@@ -138,14 +177,13 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex justify-end">
-            <button type="button" id="save-appearance-btn" onClick={handleSaveAppearance} className="btn-primary-custom">
-              Lưu cài đặt
+            <button type="button" id="save-appearance-btn" onClick={handleSaveAppearance} disabled={savingAppearance} className="btn-primary-custom disabled:opacity-60">
+              {savingAppearance ? 'Đang lưu...' : 'Lưu cài đặt'}
             </button>
           </div>
         </div>
       </SettingSection>
 
-      {/* ─── Password ─── */}
       <SettingSection title="Bảo mật" description="Thay đổi mật khẩu để bảo vệ tài khoản của bạn.">
         <form onSubmit={handlePasswordChange} className="space-y-4">
           <div>
@@ -190,35 +228,21 @@ export default function SettingsPage() {
             <button
               type="submit"
               id="change-password-btn"
-              className="btn-primary-custom"
+              disabled={savingPassword}
+              className="btn-primary-custom disabled:opacity-60"
             >
-              Cập nhật mật khẩu
+              {savingPassword ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}
             </button>
           </div>
         </form>
       </SettingSection>
-
-      {/* ─── Notifications ─── */}
-      <SettingSection title="Thông báo" description="Quản lý cách bạn nhận thông báo từ JotDown.">
-        <div className="space-y-4">
-          {[
-            { id: 'notif-share', label: 'Khi có người chia sẻ ghi chú với bạn', defaultOn: true },
-            { id: 'notif-comment', label: 'Khi ghi chú của bạn bị báo cáo', defaultOn: true },
-            { id: 'notif-plan', label: 'Nhắc nhở khi gói dịch vụ sắp hết hạn', defaultOn: true },
-            { id: 'notif-news', label: 'Tin tức và cập nhật từ JotDown', defaultOn: false },
-          ].map((n) => (
-            <div key={n.id} className="flex items-center justify-between">
-              <label htmlFor={n.id} className="text-sm text-slate-700 dark:text-slate-300 cursor-pointer">{n.label}</label>
-              <input
-                id={n.id}
-                type="checkbox"
-                defaultChecked={n.defaultOn}
-                className="toggle toggle-primary toggle-sm"
-              />
-            </div>
-          ))}
-        </div>
-      </SettingSection>
     </div>
   )
+}
+
+export default function SettingsPage() {
+  const { user, updateUser } = useAuth()
+  const settingsKey = `${user?.id || 'guest'}-${user?.theme || 'light'}-${user?.font_size || 'medium'}-${user?.default_note_color || '#ffffff'}`
+
+  return <SettingsContent key={settingsKey} user={user} updateUser={updateUser} />
 }

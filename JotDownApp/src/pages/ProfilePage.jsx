@@ -1,24 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ConfirmModal from '../components/common/ConfirmModal'
 import { useToast } from '../components/common/Toast'
+import { useAuth } from '../features/auth'
+import { apiFetch } from '../services/api'
 
-// Mock data – replace with real auth context
-const MOCK_USER = {
-  display_name: 'Nguyễn Văn A',
-  email: 'nguyenvana@example.com',
-  avatar_url: null,
-  role: 'user',
-  status: 'active',
-  plan_id: null,
-  email_verified_at: null,
-  last_login_at: new Date().toISOString(),
-  CreatedTime: '2025-05-21T08:00:00Z',
+const EMPTY_STATS = {
+  total_notes: 0,
+  total_workspaces: 0,
+  total_labels: 0,
+  shared_notes: 0,
 }
 
-const MOCK_STATS = { total_notes: 24, total_workspaces: 3, total_labels: 7, shared_notes: 5 }
+function normalizeProfileResponse(payload) {
+  const body = payload?.data || payload || {}
+  return {
+    user: body.user || body,
+    stats: body.stats || body.statistics || EMPTY_STATS,
+  }
+}
 
-function StatCard({ label, value, icon, color }) {
+function StatCard({ label, value, color, icon }) {
   return (
     <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
@@ -33,63 +35,212 @@ function StatCard({ label, value, icon, color }) {
 }
 
 export default function ProfilePage() {
+  const { user: authUser, updateUser } = useAuth()
   const { show } = useToast()
-  const user = MOCK_USER
-  const stats = MOCK_STATS
-
-  const [displayName, setDisplayName] = useState(user.display_name)
+  const authUserRef = useRef(authUser)
+  const avatarInputRef = useRef(null)
+  const authUserId = authUser?.id
+  const [profileUser, setProfileUser] = useState(authUser)
+  const [stats, setStats] = useState(EMPTY_STATS)
+  const [displayName, setDisplayName] = useState(authUser?.display_name || authUser?.name || '')
   const [editing, setEditing] = useState(false)
+  const [loading, setLoading] = useState(() => !!authUserId)
+  const [error, setError] = useState(() => (authUserId ? '' : 'Không tìm thấy userId từ phiên đăng nhập.'))
+  const [savingName, setSavingName] = useState(false)
+  const [savingAvatar, setSavingAvatar] = useState(false)
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
 
-  const handleSaveName = () => {
-    if (!displayName.trim()) return
-    show({ type: 'success', title: 'Cập nhật thành công', message: 'Tên hiển thị đã được thay đổi.' })
-    setEditing(false)
+  useEffect(() => {
+    authUserRef.current = authUser
+  }, [authUser])
+
+  useEffect(() => {
+    if (!authUserId) return
+
+    let isMounted = true
+
+    async function loadProfile() {
+      setLoading(true)
+      setError('')
+
+      try {
+        const payload = await apiFetch(`/api/users/${authUserId}/profile`)
+        const currentUser = authUserRef.current || {}
+        const nextProfile = normalizeProfileResponse(payload)
+        const nextUser = {
+          ...currentUser,
+          ...nextProfile.user,
+          CreatedTime: nextProfile.user?.CreatedTime || nextProfile.user?.created_at,
+        }
+
+        if (!isMounted) return
+
+        setProfileUser(nextUser)
+        setDisplayName(nextUser.display_name || nextUser.name || '')
+        setStats({ ...EMPTY_STATS, ...nextProfile.stats })
+        updateUser(nextUser)
+      } catch (err) {
+        if (!isMounted) return
+        const fallbackUser = authUserRef.current || {}
+        setError(err.message || 'Không thể tải hồ sơ.')
+        setProfileUser(fallbackUser)
+        setDisplayName(fallbackUser.display_name || fallbackUser.name || '')
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    loadProfile()
+
+    return () => {
+      isMounted = false
+    }
+  }, [authUserId, updateUser])
+
+  const user = profileUser || authUser || {}
+  const avatarInitial = useMemo(
+    () => (displayName || user.email || 'U').charAt(0).toUpperCase(),
+    [displayName, user.email]
+  )
+  const isPremium = user.plan_id != null
+  const isVerified = user.email_verified_at != null
+
+  const formatDate = (iso) =>
+    iso ? new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'
+
+  const mergeUser = (nextData) => {
+    const nextUser = { ...user, ...nextData }
+    setProfileUser(nextUser)
+    updateUser(nextUser)
+    return nextUser
+  }
+
+  const handleSaveName = async () => {
+    if (!authUserId || !displayName.trim()) return
+
+    setSavingName(true)
+    try {
+      const payload = await apiFetch(`/api/users/${authUserId}/display-name`, {
+        method: 'PATCH',
+        body: JSON.stringify({ display_name: displayName.trim() }),
+      })
+      const nextUser = mergeUser({ ...(payload.user || {}), display_name: displayName.trim() })
+      setDisplayName(nextUser.display_name || '')
+      setEditing(false)
+      show({ type: 'success', title: 'Cập nhật thành công', message: payload.message || 'Tên hiển thị đã được thay đổi.' })
+    } catch (err) {
+      show({ type: 'error', title: 'Lỗi', message: err.message || 'Không thể cập nhật tên hiển thị.' })
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  const handleAvatarUpdate = () => {
+    avatarInputRef.current?.click()
+  }
+
+  const handleAvatarFileChange = async (event) => {
+    if (!authUserId) return
+
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      show({ type: 'error', title: 'Lỗi', message: 'Vui lòng chọn một file ảnh.' })
+      return
+    }
+
+    setSavingAvatar(true)
+    try {
+      const signaturePayload = await apiFetch(`/api/users/${authUserId}/avatar/signature`)
+      const signatureData = signaturePayload.data || signaturePayload
+
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('api_key', signatureData.api_key)
+      formData.append('timestamp', signatureData.timestamp)
+      formData.append('signature', signatureData.signature)
+      formData.append('folder', signatureData.folder)
+
+      const cloudinaryResponse = await fetch(signatureData.upload_url, {
+        method: 'POST',
+        body: formData,
+      })
+      const cloudinaryPayload = await cloudinaryResponse.json()
+
+      if (!cloudinaryResponse.ok) {
+        throw new Error(cloudinaryPayload?.error?.message || 'Không thể upload ảnh lên Cloudinary.')
+      }
+
+      const payload = await apiFetch(`/api/users/${authUserId}/avatar`, {
+        method: 'PATCH',
+        body: JSON.stringify({ avatar_url: cloudinaryPayload.secure_url }),
+      })
+      mergeUser(payload.user || {})
+      show({ type: 'success', title: 'Cập nhật thành công', message: payload.message || 'Ảnh đại diện đã được thay đổi.' })
+    } catch (err) {
+      show({ type: 'error', title: 'Lỗi', message: err.message || 'Không thể cập nhật ảnh đại diện.' })
+    } finally {
+      setSavingAvatar(false)
+    }
   }
 
   const handleDeleteAccount = () => {
     show({ type: 'error', title: 'Tài khoản đã bị xóa', message: 'Rất tiếc khi bạn rời đi.' })
   }
 
-  const avatarInitial = displayName.charAt(0).toUpperCase()
-  const isPremium = user.plan_id != null
-  const isVerified = user.email_verified_at != null
-
-  const formatDate = (iso) =>
-    iso ? new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6">
+        <p className="text-sm text-slate-500 dark:text-slate-400">Đang tải hồ sơ...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Hero card */}
-      <div className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-card">
-        {/* Banner */}
-        <div className="h-24 bg-gradient-to-r from-primary-500 to-primary-400" />
+      {error && (
+        <div className="rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </div>
+      )}
 
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-card">
+        <div className="h-24 bg-gradient-to-r from-primary-500 to-primary-400" />
         <div className="px-6 pb-6">
-          {/* Avatar + info row */}
           <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-10 mb-5">
             <div className="relative flex-shrink-0">
-              <div className="w-20 h-20 rounded-2xl bg-white dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-lg flex items-center justify-center text-3xl font-bold text-primary-600">
+              <div className="w-20 h-20 rounded-2xl bg-white dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-lg flex items-center justify-center text-3xl font-bold text-primary-600 overflow-hidden">
                 {user.avatar_url ? (
-                  <img src={user.avatar_url} alt={displayName} className="w-full h-full object-cover rounded-xl" />
+                  <img src={user.avatar_url} alt={displayName} className="w-full h-full object-cover" />
                 ) : avatarInitial}
               </div>
               <button
                 type="button"
                 id="change-avatar-btn"
                 title="Thay ảnh đại diện"
-                className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary-500 hover:bg-primary-600 text-white rounded-full flex items-center justify-center cursor-pointer transition-colors shadow-sm"
+                onClick={handleAvatarUpdate}
+                disabled={savingAvatar}
+                className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary-500 hover:bg-primary-600 disabled:opacity-60 text-white rounded-full flex items-center justify-center cursor-pointer transition-colors shadow-sm"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.232 5.232l3.536 3.536M9 11l6-6 3 3-6 6H9v-3z" />
                 </svg>
               </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarFileChange}
+              />
             </div>
 
             <div className="flex-1">
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${isPremium ? 'badge-premium' : 'badge-free'}`}>
-                  {isPremium ? '⭐ Premium' : 'Free'}
+                  {isPremium ? (user.plan_name || 'Premium') : 'Free'}
                 </span>
                 <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${user.status === 'active' ? 'badge-active' : 'badge-inactive'}`}>
                   {user.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
@@ -103,7 +254,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Name edit */}
           <div className="space-y-1 mb-5">
             {editing ? (
               <div className="flex items-center gap-2">
@@ -115,8 +265,10 @@ export default function ProfilePage() {
                   className="form-input flex-1 text-lg font-semibold"
                   autoFocus
                 />
-                <button type="button" onClick={handleSaveName} className="btn-primary-custom py-2">Lưu</button>
-                <button type="button" onClick={() => { setEditing(false); setDisplayName(user.display_name) }} className="btn-secondary-custom py-2">Hủy</button>
+                <button type="button" onClick={handleSaveName} disabled={savingName} className="btn-primary-custom py-2 disabled:opacity-60">
+                  {savingName ? 'Đang lưu' : 'Lưu'}
+                </button>
+                <button type="button" onClick={() => { setEditing(false); setDisplayName(user.display_name || '') }} className="btn-secondary-custom py-2">Hủy</button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -136,11 +288,10 @@ export default function ProfilePage() {
             <p className="text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
           </div>
 
-          {/* Info grid */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-xs text-slate-400 mb-0.5">Tham gia từ</p>
-              <p className="font-medium text-slate-700 dark:text-slate-300">{formatDate(user.CreatedTime)}</p>
+              <p className="font-medium text-slate-700 dark:text-slate-300">{formatDate(user.created_at || user.CreatedTime)}</p>
             </div>
             <div>
               <p className="text-xs text-slate-400 mb-0.5">Đăng nhập lần cuối</p>
@@ -150,7 +301,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Stats */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 px-1">Thống kê</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -169,7 +319,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Quick actions */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 px-1">Hành động nhanh</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -202,7 +351,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Danger zone */}
       <div className="rounded-3xl border border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-900/10 p-5">
         <h2 className="text-sm font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider mb-3">Vùng nguy hiểm</h2>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
