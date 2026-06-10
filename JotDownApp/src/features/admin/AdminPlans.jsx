@@ -1,21 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import { useToast } from '../../components/common/Toast'
-
-const MOCK_PLANS = [
-  {
-    id: '1', name: 'Free', price: 0, max_notes: 50, max_workspaces: 1,
-    max_attachment_size: 0, can_export: false, status: true,
-    subscribers: 906, revenue: 0,
-    color: 'from-slate-400 to-slate-500',
-  },
-  {
-    id: '2', name: 'Premium', price: 79000, max_notes: null, max_workspaces: null,
-    max_attachment_size: 512, can_export: true, status: true,
-    subscribers: 342, revenue: 79000 * 342,
-    color: 'from-blue-500 to-indigo-600',
-  },
-]
+import { adminApi } from './adminApi'
 
 function PlanFormModal({ plan, onClose, onSave }) {
   const [form, setForm] = useState(plan || {
@@ -73,7 +59,7 @@ function PlanFormModal({ plan, onClose, onSave }) {
 
         <div className="flex gap-3 mt-6">
           <button type="button" onClick={onClose} className="btn-secondary-custom flex-1 justify-center">Hủy</button>
-          <button type="button" id="save-plan-btn" onClick={() => { onSave(form); onClose() }} className="btn-primary-custom flex-1 justify-center">
+          <button type="button" id="save-plan-btn" onClick={() => { onSave(form) }} className="btn-primary-custom flex-1 justify-center">
             {plan ? 'Lưu thay đổi' : 'Thêm gói'}
           </button>
         </div>
@@ -84,33 +70,66 @@ function PlanFormModal({ plan, onClose, onSave }) {
 
 export default function AdminPlans() {
   const { show } = useToast()
-  const [plans, setPlans] = useState(MOCK_PLANS)
+  const [plans, setPlans] = useState([])
+  const [stats, setStats] = useState(null)
   const [editPlan, setEditPlan] = useState(null)
-  const [deletePlan, setDeletePlan] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  const handleSave = (form) => {
-    if (form.id) {
-      setPlans((prev) => prev.map((p) => (p.id === form.id ? { ...p, ...form } : p)))
-      show({ type: 'success', title: 'Đã cập nhật gói dịch vụ' })
-    } else {
-      setPlans((prev) => [...prev, { ...form, id: Date.now().toString(), subscribers: 0, revenue: 0, color: 'from-slate-400 to-slate-500', icon: '📦' }])
-      show({ type: 'success', title: 'Đã thêm gói mới' })
+  const fetchPlans = async () => {
+    try {
+      setLoading(true)
+      const res = await adminApi.getPlans()
+      setPlans(res || [])
+    } catch (err) {
+      console.error(err)
+      show({ type: 'error', message: 'Không thể tải danh sách gói' })
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleDelete = () => {
-    setPlans((prev) => prev.filter((p) => p.id !== deletePlan.id))
-    show({ type: 'info', title: 'Đã xóa gói', message: deletePlan.name })
-    setDeletePlan(null)
+  const fetchStats = async () => {
+    try {
+      const res = await adminApi.getDashboardStats()
+      setStats(res)
+    } catch (err) {
+      console.error(err)
+    }
   }
 
-  const handleToggleStatus = (plan) => {
-    setPlans((prev) => prev.map((p) => p.id === plan.id ? { ...p, status: !p.status } : p))
-    show({ type: 'info', message: `Gói "${plan.name}" ${plan.status ? 'đã bị tắt' : 'đã được bật'}` })
+  useEffect(() => {
+    fetchPlans()
+    fetchStats()
+  }, [])
+
+  const handleSave = async (form) => {
+    try {
+      if (form.Id || form.id) {
+        await adminApi.updatePlan(form.Id || form.id, form)
+        show({ type: 'success', title: 'Đã cập nhật gói dịch vụ' })
+      } else {
+        await adminApi.createPlan(form)
+        show({ type: 'success', title: 'Đã thêm gói mới' })
+      }
+      setEditPlan(null)
+      fetchPlans()
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Lỗi khi lưu gói' })
+    }
   }
 
-  const totalRevenue = plans.reduce((sum, p) => sum + (p.revenue || 0), 0)
-  const totalSubscribers = plans.reduce((sum, p) => sum + (p.subscribers || 0), 0)
+  const handleToggleStatus = async (plan) => {
+    try {
+      await adminApi.togglePlanStatus(plan.Id || plan.id)
+      show({ type: 'info', message: `Gói "${plan.name}" đã được cập nhật trạng thái` })
+      fetchPlans()
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Lỗi cập nhật trạng thái' })
+    }
+  }
+
+  const totalRevenue = stats?.revenue || 0
+  const totalSubscribers = stats?.premium_users || 0
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -130,14 +149,14 @@ export default function AdminPlans() {
       {/* Overview */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-card">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tổng người dùng</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tổng người dùng Premium</p>
           <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">{totalSubscribers.toLocaleString('vi-VN')}</p>
-          <p className="text-xs text-slate-400 mt-1">Trên tất cả các gói</p>
+          <p className="text-xs text-slate-400 mt-1">Sử dụng gói trả phí</p>
         </div>
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-card">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Doanh thu hàng tháng</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tổng doanh thu</p>
           <p className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
-            {(totalRevenue / 1000000).toFixed(1)}M đ
+            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalRevenue)}
           </p>
           <p className="text-xs text-slate-400 mt-1">Từ gói trả phí</p>
         </div>
@@ -145,112 +164,84 @@ export default function AdminPlans() {
 
       {/* Plan cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {plans.map((plan) => (
-          <div
-            key={plan.id}
-            className={`rounded-2xl border-2 bg-white dark:bg-slate-800 shadow-card transition-all overflow-hidden
-              ${plan.status ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-600 opacity-60'}`}
-          >
-            {/* Gradient header */}
-            <div className={`bg-gradient-to-r ${plan.color} p-4 flex items-center justify-between`}>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{plan.icon}</span>
-                <div>
-                  <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                  <p className="text-sm text-white/80 font-medium">
-                    {plan.price === 0 ? 'Miễn phí' : `${plan.price.toLocaleString('vi-VN')}đ/tháng`}
-                  </p>
-                </div>
-              </div>
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${plan.status ? 'bg-white/20 text-white' : 'bg-white/10 text-white/60'}`}>
-                {plan.status ? 'Hoạt động' : 'Tạm dừng'}
-              </span>
-            </div>
-
-            <div className="p-5">
-              {/* Stats row */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 text-center">
-                  <p className="text-xl font-extrabold text-slate-900 dark:text-white">{(plan.subscribers || 0).toLocaleString()}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">Người dùng</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 text-center">
-                  <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
-                    {plan.revenue ? `${(plan.revenue / 1000000).toFixed(0)}M` : '0'}đ
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">Doanh thu</p>
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="space-y-2 mb-5 text-sm text-slate-600 dark:text-slate-400">
-                {[
-                  { label: 'Ghi chú tối đa', value: plan.max_notes ?? '∞ Không giới hạn' },
-                  { label: 'Workspace tối đa', value: plan.max_workspaces ?? '∞ Không giới hạn' },
-                  { label: 'Đính kèm', value: plan.max_attachment_size ? `${plan.max_attachment_size}MB` : 'Không hỗ trợ' },
-                  { label: 'Xuất file', value: plan.can_export ? '✓ Có' : '✗ Không', ok: plan.can_export },
-                ].map((f) => (
-                  <div key={f.label} className="flex justify-between">
-                    <span>{f.label}</span>
-                    <span className={`font-medium ${f.ok === true ? 'text-emerald-600' : f.ok === false ? 'text-red-400' : 'text-slate-900 dark:text-white'}`}>
-                      {f.value}
-                    </span>
+        {loading ? (
+          <div className="col-span-1 md:col-span-2 flex justify-center py-10">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+          </div>
+        ) : plans.map((plan, index) => {
+          const colorClass = index % 2 === 0 ? 'from-slate-400 to-slate-500' : 'from-blue-500 to-indigo-600';
+          return (
+            <div
+              key={plan.Id || plan.id}
+              className={`rounded-2xl border-2 bg-white dark:bg-slate-800 shadow-card transition-all overflow-hidden
+                ${plan.status ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-600 opacity-60'}`}
+            >
+              {/* Gradient header */}
+              <div className={`bg-gradient-to-r ${colorClass} p-4 flex items-center justify-between`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📦</span>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                    <p className="text-sm text-white/80 font-medium">
+                      {plan.price == 0 ? 'Miễn phí' : `${Number(plan.price).toLocaleString('vi-VN')}đ/tháng`}
+                    </p>
                   </div>
-                ))}
+                </div>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${plan.status ? 'bg-white/20 text-white' : 'bg-white/10 text-white/60'}`}>
+                  {plan.status ? 'Hoạt động' : 'Tạm dừng'}
+                </span>
               </div>
 
-              {/* Action buttons */}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  id={`edit-plan-${plan.id}`}
-                  onClick={() => setEditPlan(plan)}
-                  className="btn-secondary-custom flex-1 justify-center text-xs py-2"
-                >
-                  ✏️ Chỉnh sửa
-                </button>
-                <button
-                  type="button"
-                  id={`toggle-plan-${plan.id}`}
-                  onClick={() => handleToggleStatus(plan)}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-colors
-                    ${plan.status
-                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200'
-                      : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200'}`}
-                >
-                  {plan.status ? '⏸ Tạm dừng' : '▶ Kích hoạt'}
-                </button>
-                {plan.name !== 'Free' && (
+              <div className="p-5">
+                {/* Features */}
+                <div className="space-y-2 mb-5 text-sm text-slate-600 dark:text-slate-400">
+                  {[
+                    { label: 'Ghi chú tối đa', value: plan.max_notes ?? '∞ Không giới hạn' },
+                    { label: 'Workspace tối đa', value: plan.max_workspaces ?? '∞ Không giới hạn' },
+                    { label: 'Đính kèm', value: plan.max_attachment_size ? `${plan.max_attachment_size}MB` : 'Không hỗ trợ' },
+                    { label: 'Xuất file', value: plan.can_export ? '✓ Có' : '✗ Không', ok: !!plan.can_export },
+                  ].map((f) => (
+                    <div key={f.label} className="flex justify-between">
+                      <span>{f.label}</span>
+                      <span className={`font-medium ${f.ok === true ? 'text-emerald-600' : f.ok === false ? 'text-red-400' : 'text-slate-900 dark:text-white'}`}>
+                        {f.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    id={`delete-plan-${plan.id}`}
-                    onClick={() => setDeletePlan(plan)}
-                    className="px-3 py-2 text-xs rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 cursor-pointer transition-colors"
+                    id={`edit-plan-${plan.Id || plan.id}`}
+                    onClick={() => setEditPlan(plan)}
+                    className="btn-secondary-custom flex-1 justify-center text-xs py-2"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    ✏️ Chỉnh sửa
                   </button>
-                )}
+                  <button
+                    type="button"
+                    id={`toggle-plan-${plan.Id || plan.id}`}
+                    onClick={() => handleToggleStatus(plan)}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-colors
+                      ${plan.status
+                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200'
+                        : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200'}`}
+                  >
+                    {plan.status ? '⏸ Tạm dừng' : '▶ Kích hoạt'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {editPlan !== null && (
         <PlanFormModal plan={editPlan || null} onClose={() => setEditPlan(null)} onSave={handleSave} />
       )}
-
-      <ConfirmModal
-        isOpen={deletePlan !== null}
-        onClose={() => setDeletePlan(null)}
-        onConfirm={handleDelete}
-        title="Xóa gói dịch vụ"
-        message={`Bạn có chắc chắn muốn xóa gói "${deletePlan?.name}"? Hành động này không thể hoàn tác.`}
-        variant="danger"
-        confirmText="Xóa gói"
-      />
     </div>
   )
 }
+
