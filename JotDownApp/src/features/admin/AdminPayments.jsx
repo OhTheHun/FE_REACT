@@ -1,18 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ConfirmModal from '../../components/common/ConfirmModal'
 import { useToast } from '../../components/common/Toast'
-
-const MOCK_PAYMENTS = [
-  { id: 'TXN-1001', user_name: 'Nguyễn Văn A', email: 'nguyenvana@example.com', plan: 'Premium', amount: 79000, method: 'VNPay', status: 'pending', date: '2026-06-05 14:30' },
-  { id: 'TXN-1002', user_name: 'Trần Thị B', email: 'tranthib@example.com', plan: 'Premium', amount: 79000, method: 'MoMo', status: 'success', date: '2026-06-04 09:15' },
-  { id: 'TXN-1003', user_name: 'Lê Văn C', email: 'levanc@example.com', plan: 'Premium', amount: 79000, method: 'Ví Momo', status: 'failed', date: '2026-06-03 18:22' },
-  { id: 'TXN-1004', user_name: 'Đặng Văn E', email: 'dangvane@example.com', plan: 'Premium', amount: 79000, method: 'Chuyển khoản', status: 'success', date: '2026-06-02 11:00' },
-  { id: 'TXN-1005', user_name: 'Vũ Thị F', email: 'vuthif@example.com', plan: 'Premium', amount: 79000, method: 'VNPay', status: 'pending', date: '2026-06-01 08:45' },
-]
+import { adminApi } from './adminApi'
 
 const STATUS_MAP = {
   pending: { cls: 'badge-pending', label: 'Chờ duyệt' },
   success: { cls: 'badge-success', label: 'Thành công' },
+  confirmed: { cls: 'badge-success', label: 'Thành công' },
   failed:  { cls: 'badge-failed',  label: 'Thất bại' },
 }
 
@@ -25,34 +19,79 @@ const METHOD_ICON = {
 
 export default function AdminPayments() {
   const { show } = useToast()
-  const [payments, setPayments] = useState(MOCK_PAYMENTS)
+  const [payments, setPayments] = useState([])
+  const [stats, setStats] = useState(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [approveTarget, setApproveTarget] = useState(null)
-  const [rejectTarget, setRejectTarget] = useState(null)
+  
+  const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
 
-  const handleApprove = (id) => {
-    setPayments(payments.map((p) => p.id === id ? { ...p, status: 'success' } : p))
-    show({ type: 'success', title: 'Đã duyệt giao dịch', message: `${id} được xác nhận thành công.` })
-    setApproveTarget(null)
+  const fetchPayments = async (p = 1, query = search) => {
+    try {
+      setLoading(true)
+      const res = await adminApi.getPayments({ page: p, per_page: 20, q: query })
+      setPayments(res.data || [])
+      setPage(res.current_page || 1)
+      setTotalPages(res.last_page || 1)
+    } catch (err) {
+      console.error(err)
+      show({ type: 'error', message: 'Không thể tải danh sách giao dịch' })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleReject = (id) => {
-    setPayments(payments.map((p) => p.id === id ? { ...p, status: 'failed' } : p))
-    show({ type: 'error', title: 'Đã từ chối giao dịch', message: `${id} bị đánh dấu thất bại.` })
-    setRejectTarget(null)
+  const fetchStats = async () => {
+    try {
+      const res = await adminApi.getDashboardStats()
+      setStats(res)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  useEffect(() => {
+    fetchStats()
+  }, [])
+
+  useEffect(() => {
+    const delaySearch = setTimeout(() => {
+      fetchPayments(1, search)
+    }, 500)
+    return () => clearTimeout(delaySearch)
+  }, [search])
+
+  const handleApprove = async (id) => {
+    try {
+      await adminApi.confirmPayment(id)
+      show({ type: 'success', title: 'Đã duyệt giao dịch', message: `Mã ${id} được xác nhận thành công.` })
+      fetchPayments(page, search)
+      fetchStats()
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Lỗi khi xác nhận giao dịch' })
+    } finally {
+      setApproveTarget(null)
+    }
   }
 
   const filtered = payments.filter((p) => {
-    const matchSearch = !search || p.user_name.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = statusFilter === 'all' || p.status === statusFilter
-    return matchSearch && matchStatus
+    const pStatus = p.status === 'confirmed' ? 'success' : p.status
+    const matchStatus = statusFilter === 'all' || pStatus === statusFilter || p.status === statusFilter
+    return matchStatus
   })
 
-  // Revenue summary
-  const successPayments = payments.filter((p) => p.status === 'success')
-  const totalRevenue = successPayments.reduce((sum, p) => sum + p.amount, 0)
-  const pendingCount = payments.filter((p) => p.status === 'pending').length
+  // Revenue summary (from global stats when possible, or estimate from current page)
+  const totalRevenue = stats?.revenue || 0
+  const pendingCount = payments.filter((p) => p.status === 'pending').length // approximate from current page if stats don't have it
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      fetchPayments(newPage, search)
+    }
+  }
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -66,21 +105,21 @@ export default function AdminPayments() {
         <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-4">
           <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Tổng doanh thu</p>
           <p className="text-2xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-1">
-            {totalRevenue.toLocaleString('vi-VN')}đ
+            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalRevenue)}
           </p>
-          <p className="text-xs text-emerald-500 mt-1">{successPayments.length} giao dịch thành công</p>
+          <p className="text-xs text-emerald-500 mt-1">Từ các gói trả phí</p>
         </div>
         <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4">
-          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Đang chờ duyệt</p>
+          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Trạng thái (Trang này)</p>
           <p className="text-2xl font-extrabold text-amber-700 dark:text-amber-300 mt-1">{pendingCount}</p>
-          <p className="text-xs text-amber-500 mt-1">Cần xử lý ngay</p>
+          <p className="text-xs text-amber-500 mt-1">Đang chờ duyệt</p>
         </div>
         <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-4">
           <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider">Giao dịch thất bại</p>
           <p className="text-2xl font-extrabold text-red-700 dark:text-red-300 mt-1">
             {payments.filter((p) => p.status === 'failed').length}
           </p>
-          <p className="text-xs text-red-400 mt-1">Tổng số lỗi</p>
+          <p className="text-xs text-red-400 mt-1">Tổng số lỗi (Trang này)</p>
         </div>
       </div>
 
@@ -133,29 +172,37 @@ export default function AdminPayments() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
-                  <td className="p-4 text-xs font-mono font-bold text-slate-600 dark:text-slate-300">{p.id}</td>
+              {loading ? (
+                <tr>
+                  <td colSpan="8" className="p-10 text-center">
+                    <div className="flex justify-center items-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                    </div>
+                  </td>
+                </tr>
+              ) : filtered.map((p) => (
+                <tr key={p.Id || p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                  <td className="p-4 text-xs font-mono font-bold text-slate-600 dark:text-slate-300">{p.transaction_code || p.Id || p.id}</td>
                   <td className="p-4">
-                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{p.user_name}</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{p.email}</div>
+                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{p.user?.display_name || p.user_name || 'Unknown'}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{p.user?.email || p.email}</div>
                   </td>
                   <td className="p-4">
-                    <span className="badge-premium text-xs px-2 py-0.5 rounded-full font-medium">{p.plan}</span>
+                    <span className="badge-premium text-xs px-2 py-0.5 rounded-full font-medium">{p.plan?.name || p.plan || 'Premium'}</span>
                   </td>
                   <td className="p-4 text-sm font-bold text-slate-900 dark:text-white">
-                    {p.amount.toLocaleString('vi-VN')}đ
+                    {Number(p.amount).toLocaleString('vi-VN')}đ
                   </td>
                   <td className="p-4 text-xs text-slate-500 dark:text-slate-400">
                     <span className="flex items-center gap-1.5">
-                      <span>{METHOD_ICON[p.method] || '💰'}</span>
-                      {p.method}
+                      <span>{METHOD_ICON[p.payment_method || p.method] || '💰'}</span>
+                      {p.payment_method || p.method}
                     </span>
                   </td>
-                  <td className="p-4 text-xs text-slate-400 whitespace-nowrap">{p.date}</td>
+                  <td className="p-4 text-xs text-slate-400 whitespace-nowrap">{new Date(p.CreatedTime || p.date || p.created_at).toLocaleString('vi-VN')}</td>
                   <td className="p-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_MAP[p.status]?.cls}`}>
-                      {STATUS_MAP[p.status]?.label}
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_MAP[p.status]?.cls || 'bg-slate-100'}`}>
+                      {STATUS_MAP[p.status]?.label || p.status}
                     </span>
                   </td>
                   <td className="p-4 text-right">
@@ -163,16 +210,8 @@ export default function AdminPayments() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
-                          id={`reject-payment-${p.id}`}
-                          onClick={() => setRejectTarget(p.id)}
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 cursor-pointer transition-colors"
-                        >
-                          Từ chối
-                        </button>
-                        <button
-                          type="button"
-                          id={`approve-payment-${p.id}`}
-                          onClick={() => setApproveTarget(p.id)}
+                          id={`approve-payment-${p.Id || p.id}`}
+                          onClick={() => setApproveTarget(p.Id || p.id)}
                           className="btn-primary-custom py-1 px-3 text-xs"
                         >
                           Duyệt
@@ -182,7 +221,7 @@ export default function AdminPayments() {
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {!loading && filtered.length === 0 && (
                 <tr>
                   <td colSpan="8" className="p-10 text-center text-xs text-slate-400 italic">Không tìm thấy giao dịch nào.</td>
                 </tr>
@@ -190,9 +229,28 @@ export default function AdminPayments() {
             </tbody>
           </table>
         </div>
-        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400">
-          Hiển thị {filtered.length} / {payments.length} giao dịch
-        </div>
+        {/* Pagination */}
+        {!loading && totalPages > 1 && (
+          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-400">
+            <span>Trang {page} / {totalPages}</span>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => handlePageChange(page - 1)}
+                className="px-3 py-1 rounded border border-slate-200 dark:border-slate-600 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                Trước
+              </button>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => handlePageChange(page + 1)}
+                className="px-3 py-1 rounded border border-slate-200 dark:border-slate-600 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                Sau
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Confirm approve */}
@@ -201,23 +259,12 @@ export default function AdminPayments() {
         onClose={() => setApproveTarget(null)}
         onConfirm={() => handleApprove(approveTarget)}
         title="Duyệt giao dịch"
-        message="Xác nhận rằng người dùng đã thanh toán đủ tiền nâng cấp gói."
+        message="Xác nhận rằng người dùng đã thanh toán đủ tiền nâng cấp gói. Hành động này sẽ tự động nâng cấp tài khoản của họ."
         variant="info"
         confirmText="Xác nhận duyệt"
-        cancelText="Hủy"
-      />
-
-      {/* Confirm reject */}
-      <ConfirmModal
-        isOpen={rejectTarget !== null}
-        onClose={() => setRejectTarget(null)}
-        onConfirm={() => handleReject(rejectTarget)}
-        title="Từ chối giao dịch"
-        message="Đánh dấu giao dịch này là thất bại. Người dùng sẽ không được nâng cấp."
-        variant="danger"
-        confirmText="Xác nhận từ chối"
         cancelText="Hủy"
       />
     </div>
   )
 }
+

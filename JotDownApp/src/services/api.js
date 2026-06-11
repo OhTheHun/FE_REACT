@@ -21,7 +21,11 @@ function getApiErrorMessage(payload, status) {
 }
 
 function isInvalidTokenError(payload) {
-  return Boolean(payload?.errors?.authorization || payload?.message === 'Invalid or expired token.')
+  return Boolean(
+    payload?.errors?.authorization || 
+    payload?.message === 'Invalid or expired token.' ||
+    payload?.message === 'Unauthenticated.'
+  )
 }
 
 export async function apiFetch(endpoint, options = {}) {

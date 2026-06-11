@@ -1,15 +1,6 @@
-import { useState } from 'react'
-
-const MOCK_LOGS = [
-  { id: 'LOG-4001', user: 'nguyenvana@example.com', role: 'user', action: 'Đăng nhập thành công', resource: 'Hệ thống Auth', ip: '192.168.1.10', date: '2026-06-05 14:50:11', severity: 'info' },
-  { id: 'LOG-4002', user: 'admin@example.com', role: 'admin', action: 'Cập nhật gói Premium', resource: 'Admin Plans', ip: '113.23.4.156', date: '2026-06-05 14:48:02', severity: 'warning' },
-  { id: 'LOG-4003', user: 'tranthib@example.com', role: 'user', action: 'Tạo Workspace mới', resource: 'Workspace "Dự án FE"', ip: '27.72.93.111', date: '2026-06-05 14:45:23', severity: 'info' },
-  { id: 'LOG-4004', user: 'levanc@example.com', role: 'user', action: 'Thay đổi mật khẩu', resource: 'Cá nhân Settings', ip: '171.244.15.22', date: '2026-06-05 14:42:00', severity: 'info' },
-  { id: 'LOG-4005', user: 'admin@example.com', role: 'admin', action: 'Khóa tài khoản người dùng', resource: 'User ID: phamthid', ip: '113.23.4.156', date: '2026-06-05 14:38:11', severity: 'danger' },
-  { id: 'LOG-4006', user: 'dangvane@example.com', role: 'user', action: 'Thanh toán nâng cấp Premium', resource: 'TXN-1004', ip: '103.7.13.88', date: '2026-06-05 14:30:55', severity: 'success' },
-  { id: 'LOG-4007', user: 'vuthif@example.com', role: 'user', action: 'Xuất ghi chú PDF', resource: 'Note ID: note-99', ip: '118.69.14.231', date: '2026-06-05 14:22:07', severity: 'info' },
-  { id: 'LOG-4008', user: 'admin@example.com', role: 'admin', action: 'Xóa báo cáo vi phạm', resource: 'Report REP-102', ip: '113.23.4.156', date: '2026-06-05 14:10:33', severity: 'warning' },
-]
+import { useState, useEffect } from 'react'
+import { adminApi } from './adminApi'
+import { useToast } from '../../components/common/Toast'
 
 const SEVERITY_STYLE = {
   info:    'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
@@ -26,22 +17,67 @@ const SEVERITY_DOT = {
   danger:  'bg-red-500',
 }
 
+const getSeverity = (action) => {
+  const act = action.toLowerCase()
+  if (act.includes('lock') || act.includes('delete') || act.includes('ban') || act.includes('reject')) return 'danger'
+  if (act.includes('hide') || act.includes('report') || act.includes('toggle')) return 'warning'
+  if (act.includes('payment') || act.includes('confirm') || act.includes('success') || act.includes('create') || act.includes('store') || act.includes('update')) return 'success'
+  return 'info'
+}
+
 export default function AdminActivityLogs() {
-  const [logs] = useState(MOCK_LOGS)
+  const { show } = useToast()
+  const [logs, setLogs] = useState([])
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [severityFilter, setSeverityFilter] = useState('all')
 
+  const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+
+  const fetchLogs = async (p = 1, query = search) => {
+    try {
+      setLoading(true)
+      const res = await adminApi.getActivityLogs({ page: p, per_page: 50, q: query })
+      
+      const mappedLogs = (res.data || []).map(log => {
+        const isAdminAction = log.action?.startsWith('admin_') || log.user?.role === 'admin'
+        return {
+          ...log,
+          computed_role: isAdminAction ? 'admin' : 'user',
+          computed_severity: getSeverity(log.action),
+        }
+      })
+
+      setLogs(mappedLogs)
+      setPage(res.current_page || 1)
+      setTotalPages(res.last_page || 1)
+    } catch (err) {
+      console.error(err)
+      show({ type: 'error', message: 'Không thể tải nhật ký hoạt động' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const delaySearch = setTimeout(() => {
+      fetchLogs(1, search)
+    }, 500)
+    return () => clearTimeout(delaySearch)
+  }, [search])
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      fetchLogs(newPage, search)
+    }
+  }
+
   const filteredLogs = logs.filter((log) => {
-    const matchSearch =
-      !search ||
-      log.user.toLowerCase().includes(search.toLowerCase()) ||
-      log.action.toLowerCase().includes(search.toLowerCase()) ||
-      log.resource.toLowerCase().includes(search.toLowerCase()) ||
-      log.id.toLowerCase().includes(search.toLowerCase())
-    const matchRole = roleFilter === 'all' || log.role === roleFilter
-    const matchSeverity = severityFilter === 'all' || log.severity === severityFilter
-    return matchSearch && matchRole && matchSeverity
+    const matchRole = roleFilter === 'all' || log.computed_role === roleFilter
+    const matchSeverity = severityFilter === 'all' || log.computed_severity === severityFilter
+    return matchRole && matchSeverity
   })
 
   return (
@@ -53,10 +89,10 @@ export default function AdminActivityLogs() {
         </p>
       </div>
 
-      {/* Summary badges */}
+      {/* Summary badges (based on current page) */}
       <div className="flex flex-wrap gap-3">
         {Object.entries(SEVERITY_LABEL).map(([key, label]) => {
-          const count = logs.filter((l) => l.severity === key).length
+          const count = logs.filter((l) => l.computed_severity === key).length
           return (
             <button
               key={key}
@@ -83,7 +119,7 @@ export default function AdminActivityLogs() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo tài khoản, hành động, mã log..."
+            placeholder="Tìm theo hành động, mô tả..."
             className="form-input pl-9 text-xs"
           />
         </div>
@@ -114,38 +150,46 @@ export default function AdminActivityLogs() {
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase">Mã log</th>
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase">Người dùng</th>
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase">Hành động</th>
-                <th className="p-4 text-xs font-bold text-slate-400 uppercase">Tài nguyên</th>
+                <th className="p-4 text-xs font-bold text-slate-400 uppercase">Mô tả / Tài nguyên</th>
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase">Địa chỉ IP</th>
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase">Mức độ</th>
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase">Thời gian</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {filteredLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="p-4 text-xs font-mono font-bold text-slate-500 dark:text-slate-400">{log.id}</td>
+              {loading ? (
+                <tr>
+                  <td colSpan="7" className="p-10 text-center">
+                    <div className="flex justify-center items-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredLogs.map((log) => (
+                <tr key={log.Id || log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                  <td className="p-4 text-xs font-mono font-bold text-slate-500 dark:text-slate-400">{log.Id || log.id}</td>
                   <td className="p-4">
-                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{log.user}</div>
+                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{log.user?.email || 'System'}</div>
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase mt-1
-                      ${log.role === 'admin'
+                      ${log.computed_role === 'admin'
                         ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
                         : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
-                      {log.role}
+                      {log.computed_role}
                     </span>
                   </td>
                   <td className="p-4 text-xs font-medium text-slate-900 dark:text-white max-w-[200px]">{log.action}</td>
-                  <td className="p-4 text-xs text-slate-500 dark:text-slate-400 font-mono max-w-[180px] truncate">{log.resource}</td>
-                  <td className="p-4 text-xs text-slate-500 dark:text-slate-400 font-mono">{log.ip}</td>
+                  <td className="p-4 text-xs text-slate-500 dark:text-slate-400 max-w-[250px] truncate" title={log.description}>{log.description}</td>
+                  <td className="p-4 text-xs text-slate-500 dark:text-slate-400 font-mono">{log.ip_address}</td>
                   <td className="p-4">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${SEVERITY_STYLE[log.severity]}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${SEVERITY_DOT[log.severity]}`} />
-                      {SEVERITY_LABEL[log.severity]}
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${SEVERITY_STYLE[log.computed_severity]}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${SEVERITY_DOT[log.computed_severity]}`} />
+                      {SEVERITY_LABEL[log.computed_severity]}
                     </span>
                   </td>
-                  <td className="p-4 text-xs text-slate-400 whitespace-nowrap">{log.date}</td>
+                  <td className="p-4 text-xs text-slate-400 whitespace-nowrap">{new Date(log.created_at).toLocaleString('vi-VN')}</td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && (
+              {!loading && filteredLogs.length === 0 && (
                 <tr>
                   <td colSpan="7" className="p-10 text-center text-xs text-slate-400 italic">
                     Không có nhật ký phù hợp.
@@ -155,10 +199,30 @@ export default function AdminActivityLogs() {
             </tbody>
           </table>
         </div>
-        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400">
-          Hiển thị {filteredLogs.length} / {logs.length} bản ghi
-        </div>
+        {/* Pagination */}
+        {!loading && totalPages > 1 && (
+          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-400">
+            <span>Trang {page} / {totalPages}</span>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => handlePageChange(page - 1)}
+                className="px-3 py-1 rounded border border-slate-200 dark:border-slate-600 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                Trước
+              </button>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => handlePageChange(page + 1)}
+                className="px-3 py-1 rounded border border-slate-200 dark:border-slate-600 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                Sau
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
 }
+
