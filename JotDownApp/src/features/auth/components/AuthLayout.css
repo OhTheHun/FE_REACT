@@ -56,6 +56,12 @@
   padding: 56px 64px 72px;
 }
 
+.auth-page--form-left .auth-brand-panel {
+  order: 2;
+  border-right: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 .auth-brand-link {
   display: inline-flex;
   width: fit-content;
@@ -129,6 +135,10 @@
   align-items: center;
   justify-content: center;
   padding: 56px 64px;
+}
+
+.auth-page--form-left .auth-form-panel {
+  order: 1;
 }
 
 .auth-card {
@@ -284,6 +294,15 @@
     min-height: auto;
     border-right: 0;
     padding: 28px 28px 18px;
+  }
+
+  .auth-page--form-left .auth-brand-panel,
+  .auth-page--form-left .auth-form-panel {
+    order: initial;
+  }
+
+  .auth-page--form-left .auth-brand-panel {
+    border-left: 0;
   }
 
   .auth-brand-copy {

@@ -8,7 +8,7 @@ import { verifyPasswordResetOtp } from '../services/authService'
 
 function SuccessCard({ onGoLogin }) {
   return (
-    <AuthLayout>
+    <AuthLayout formPosition="left">
       <div className="text-center">
         <div className="mb-6 mx-auto w-16 h-16 bg-emerald-400/15 text-emerald-300 rounded-full flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -68,7 +68,7 @@ function ResetPasswordPage() {
   }
 
   return (
-    <AuthLayout>
+    <AuthLayout formPosition="left">
       <AuthHeader
         title="Tạo mật khẩu mới"
         subtitle="Nhập email, mã OTP đã nhận và mật khẩu mới của bạn."
@@ -96,7 +96,7 @@ function ResetPasswordPage() {
           onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
           placeholder="123456"
           maxLength={6}
-          style={{ textAlign: 'center', letterSpacing: '0.2em', fontFamily: 'monospace', fontSize: '1.125rem' }}
+          style={{ textAlign: 'left', letterSpacing: '0.2em', fontFamily: 'monospace', fontSize: '1.125rem' }}
         />
 
         <AuthInput

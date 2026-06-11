@@ -111,7 +111,7 @@ export async function fetchNotes(params = {}) {
 
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
-      query.set(key, value)
+      query.set(key, typeof value === 'boolean' ? (value ? '1' : '0') : value)
     }
   })
 

@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
 import './AuthLayout.css'
 
-function AuthLayout({ children }) {
+function AuthLayout({ children, formPosition = 'right' }) {
+  const pageClassName = formPosition === 'left' ? 'auth-page auth-page--form-left' : 'auth-page'
+
   return (
-    <div className="auth-page">
+    <div className={pageClassName}>
       <section className="auth-brand-panel">
         <Link to="/landing" className="auth-brand-link" aria-label="Về trang chính JotDown">
           <span className="auth-brand-mark" aria-hidden="true">
