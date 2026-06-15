@@ -218,8 +218,8 @@ export default function AdminUsers() {
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('vi-VN') : '—'
 
   return (
-    <div className="space-y-5 max-w-6xl">
-      <div className="flex items-center justify-between">
+    <div className="w-full space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Quản lý người dùng</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Tổng {totalUsers} tài khoản trong hệ thống.</p>
@@ -238,7 +238,7 @@ export default function AdminUsers() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-6 gap-3">
         {[
           { label: 'Tổng số', value: stats?.total_users || 0, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20', filter: null },
           { label: 'Premium', value: stats?.premium_users || 0, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20', filter: null },
@@ -257,8 +257,8 @@ export default function AdminUsers() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="relative w-full xl:max-w-md">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -295,7 +295,7 @@ export default function AdminUsers() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
             </div>
           ) : (
-            <table className="w-full table-custom">
+            <table className="w-full min-w-[860px] table-custom">
               <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700">
                 <tr>
                   <th>Người dùng</th>

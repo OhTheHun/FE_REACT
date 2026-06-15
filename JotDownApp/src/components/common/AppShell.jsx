@@ -1,12 +1,13 @@
-import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
-import { useState } from 'react'
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import Sidebar from './Sidebar'
 import Footer from './Footer'
 import { useAuth } from '../../features/auth'
+import { useToast } from './Toast'
 
 const AUTH_PATHS = ['/login', '/register', '/forgot-password', '/reset-password']
 const PUBLIC_PATHS = ['/', '/landing', '/plans']
-const APP_PATHS = ['/notes', '/workspaces', '/labels', '/profile', '/settings']
+const APP_PATHS = ['/notes', '/workspaces', '/labels', '/profile', '/settings', '/payments']
 
 function isPathIn(pathname, paths) {
   return paths.some((p) => pathname === p || pathname.startsWith(p + '/'))
@@ -36,8 +37,44 @@ function AccountLink({ user }) {
 
 export default function AppShell() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { show } = useToast()
   const { user, isAuthenticated } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const paymentStatus = params.get('payment_status')
+    const paymentMethod = params.get('payment_method')
+
+    if (!paymentStatus || !paymentMethod) return
+
+    const methodLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod.toUpperCase()
+    const message = params.get('message') || (
+      paymentStatus === 'success'
+        ? `Thanh toán ${methodLabel} thành công.`
+        : `Thanh toán ${methodLabel} đã bị hủy.`
+    )
+
+    show({
+      type: paymentStatus === 'success' ? 'success' : 'info',
+      title: paymentStatus === 'success' ? 'Thanh toán thành công' : 'Thanh toán đã hủy',
+      message,
+      duration: 6000,
+    })
+
+    params.delete('payment_method')
+    params.delete('payment_status')
+    params.delete('payment_id')
+    params.delete('transaction_code')
+    params.delete('paypal_order_id')
+    params.delete('message')
+
+    navigate({
+      pathname: location.pathname,
+      search: params.toString() ? `?${params.toString()}` : '',
+    }, { replace: true })
+  }, [location.pathname, location.search, navigate, show])
 
   const isAdmin = user?.role === 'admin'
   const isAuthPage = isPathIn(location.pathname, AUTH_PATHS)

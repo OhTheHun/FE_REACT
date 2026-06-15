@@ -5,6 +5,7 @@ import NotesPage from './pages/NotesPage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import PlansPage from './pages/PlansPage'
+import PaymentsPage from './pages/PaymentsPage'
 import WorkspacesPage from './pages/WorkspacesPage'
 import LabelsPage from './pages/LabelsPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -50,6 +51,7 @@ function App() {
               <Route path="profile" element={<AuthGuard allowedRoles={['user']}><ProfilePage /></AuthGuard>} />
               <Route path="settings" element={<AuthGuard allowedRoles={['user']}><SettingsPage /></AuthGuard>} />
               <Route path="plans" element={<PlansPage />} />
+              <Route path="payments" element={<AuthGuard allowedRoles={['user']}><PaymentsPage /></AuthGuard>} />
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
               <Route path="forgot-password" element={<ForgotPasswordPage />} />

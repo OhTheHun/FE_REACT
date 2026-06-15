@@ -1,56 +1,123 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '../components/common/Toast'
 import { useAuth } from '../features/auth'
+import { apiFetch } from '../services/api'
 
-const PLANS = [
+const PLANS_PER_PAGE = 4
+const PAYMENT_METHODS = [
   {
-    id: 'free',
-    name: 'Free',
-    price: 0,
-    period: 'mãi mãi',
-    description: 'Dành cho cá nhân muốn bắt đầu.',
-    color: 'border-slate-200 dark:border-slate-700',
-    badge: null,
-    features: [
-      { text: '50 ghi chú', ok: true },
-      { text: '1 workspace', ok: true },
-      { text: 'Gắn nhãn cơ bản', ok: true },
-      { text: 'Chia sẻ ghi chú (giới hạn)', ok: true },
-      { text: 'Tệp đính kèm', ok: false },
-      { text: 'Xuất PDF/Markdown', ok: false },
-      { text: 'Không giới hạn workspace', ok: false },
-      { text: 'Ưu tiên hỗ trợ', ok: false },
-    ],
-    cta: 'Đang sử dụng',
-    ctaDisabled: true,
+    value: 'vnpay',
+    label: 'VNPay',
+    description: 'Thanh toán nội địa qua cổng VNPay.',
+    action: 'Thanh toán VNPay',
   },
   {
-    id: 'premium',
-    name: 'Premium',
-    price: 79000,
-    period: '/tháng',
-    description: 'Đầy đủ tính năng cho người dùng nghiêm túc.',
-    color: 'border-primary-400 dark:border-primary-500',
-    badge: 'Phổ biến nhất',
-    features: [
-      { text: 'Không giới hạn ghi chú', ok: true },
-      { text: 'Không giới hạn workspace', ok: true },
-      { text: 'Gắn nhãn nâng cao', ok: true },
-      { text: 'Chia sẻ ghi chú đầy đủ', ok: true },
-      { text: 'Tệp đính kèm (500MB)', ok: true },
-      { text: 'Xuất PDF/Markdown', ok: true },
-      { text: 'Bảo vệ ghi chú bằng mật khẩu', ok: true },
-      { text: 'Ưu tiên hỗ trợ', ok: true },
-    ],
-    cta: 'Nâng cấp ngay',
-    ctaDisabled: false,
+    value: 'paypal',
+    label: 'PayPal',
+    description: 'Thanh toán quốc tế qua PayPal Sandbox.',
+    action: 'Thanh toán PayPal',
   },
 ]
 
+const getPlanId = (plan) => plan?.id ?? plan?.Id
+
+const toNumber = (value) => {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+const isUnlimited = (value) => value === null || value === undefined || value === ''
+
+const buildPlanFeatures = (plan) => {
+  const maxNotes = plan.max_notes
+  const maxWorkspaces = plan.max_workspaces
+  const attachmentSize = toNumber(plan.max_attachment_size)
+  const canExport = Boolean(plan.can_export)
+
+  return [
+    {
+      text: isUnlimited(maxNotes) ? 'Không giới hạn ghi chú' : `${Number(maxNotes).toLocaleString('vi-VN')} ghi chú`,
+      ok: true,
+    },
+    {
+      text: isUnlimited(maxWorkspaces) ? 'Không giới hạn workspace' : `${Number(maxWorkspaces).toLocaleString('vi-VN')} workspace`,
+      ok: true,
+    },
+    {
+      text: attachmentSize > 0 ? `Tệp đính kèm (${attachmentSize.toLocaleString('vi-VN')}MB)` : 'Tệp đính kèm',
+      ok: attachmentSize > 0,
+    },
+    {
+      text: 'Xuất PDF/Markdown',
+      ok: canExport,
+    },
+  ]
+}
+
+const mapApiPlan = (plan, index) => {
+  const price = toNumber(plan.price)
+  const isPaid = price > 0
+
+  return {
+    ...plan,
+    id: getPlanId(plan),
+    price,
+    period: isPaid ? '/tháng' : 'mãi mãi',
+    description: isPaid
+      ? 'Đầy đủ tính năng cho người dùng có nhu cầu cao.'
+      : 'Dành cho cá nhân muốn bắt đầu.',
+    color: isPaid ? 'border-primary-400 dark:border-primary-500' : 'border-slate-200 dark:border-slate-700',
+    badge: isPaid && index === 1 ? 'Phổ biến nhất' : null,
+    features: buildPlanFeatures(plan),
+    cta: 'Nâng cấp ngay',
+    ctaDisabled: false,
+  }
+}
+
+function PaginationControls({ page, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => onPageChange(page - 1)}
+        disabled={page <= 1}
+        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+      >
+        Trước
+      </button>
+      {Array.from({ length: totalPages }, (_, index) => index + 1).map((item) => (
+        <button
+          key={item}
+          type="button"
+          onClick={() => onPageChange(item)}
+          className={`w-8 h-8 text-xs font-bold rounded-lg transition-colors
+            ${item === page
+              ? 'bg-primary-500 text-white'
+              : 'border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+        >
+          {item}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => onPageChange(page + 1)}
+        disabled={page >= totalPages}
+        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+      >
+        Sau
+      </button>
+    </div>
+  )
+}
+
 function PlanCard({ plan, currentPlanId, onUpgrade }) {
-  const isActive = plan.id === (currentPlanId || 'free')
-  const isPremium = plan.id === 'premium'
+  const normalizedCurrentPlanId = currentPlanId == null ? null : String(currentPlanId)
+  const isActive = normalizedCurrentPlanId ? String(plan.id) === normalizedCurrentPlanId : false
+  const isPremium = plan.price > 0
 
   return (
     <div
@@ -108,10 +175,10 @@ function PlanCard({ plan, currentPlanId, onUpgrade }) {
       <button
         type="button"
         id={`plan-${plan.id}-btn`}
-        onClick={() => !plan.ctaDisabled && onUpgrade(plan)}
+        onClick={() => !isActive && onUpgrade(plan)}
         disabled={plan.ctaDisabled || isActive}
         className={`w-full py-3 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer
-          ${isPremium && !isActive
+          ${!isActive
             ? 'bg-primary-500 hover:bg-primary-600 text-white shadow-sm hover:shadow-md hover:shadow-primary-500/20'
             : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
           }`}
@@ -185,6 +252,10 @@ function PaymentModal({ plan, onClose, onConfirm }) {
         </div>
 
         <p className="text-xs text-slate-400 dark:text-slate-500 mb-4 text-center">
+          Gói sẽ được kích hoạt sau khi cổng thanh toán xác nhận giao dịch thành công.
+        </p>
+
+        <p className="hidden">
           Đây là giao dịch mô phỏng. Không có tiền thật được xử lý.
         </p>
 
@@ -199,12 +270,147 @@ function PaymentModal({ plan, onClose, onConfirm }) {
   )
 }
 
+function PaymentGatewayModal({ plan, onClose, onConfirm, submitting }) {
+  const [method, setMethod] = useState('vnpay')
+
+  if (!plan) return null
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true">
+      <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl shadow-modal p-6 animate-slide-up">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Xác nhận thanh toán</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 cursor-pointer disabled:opacity-50"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="rounded-2xl bg-slate-50 dark:bg-slate-700/50 p-4 mb-5 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-500 dark:text-slate-400">Gói dịch vụ</span>
+            <span className="font-semibold text-slate-900 dark:text-white">{plan.name}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-500 dark:text-slate-400">Thời hạn</span>
+            <span className="font-semibold text-slate-900 dark:text-white">1 tháng</span>
+          </div>
+          <div className="h-px bg-slate-200 dark:bg-slate-600 my-2" />
+          <div className="flex justify-between">
+            <span className="font-semibold text-slate-700 dark:text-slate-300">Tổng cộng</span>
+            <span className="text-xl font-extrabold text-primary-600 dark:text-primary-400">
+              {plan.price.toLocaleString('vi-VN')}đ
+            </span>
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <label className="form-label">Phương thức thanh toán</label>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {PAYMENT_METHODS.map((item) => (
+              <label
+                key={item.value}
+                id={`payment-method-${item.value}`}
+                className={`flex cursor-pointer flex-col gap-1 rounded-2xl border-2 p-3 transition-colors ${
+                  method === item.value
+                    ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                    : 'border-slate-200 hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-500'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="payment_method"
+                  value={item.value}
+                  checked={method === item.value}
+                  onChange={() => setMethod(item.value)}
+                  disabled={submitting}
+                  className="sr-only"
+                />
+                <span className="text-sm font-bold text-slate-900 dark:text-white">{item.label}</span>
+                <span className="text-xs leading-5 text-slate-500 dark:text-slate-400">{item.description}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="hidden">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">Thanh toán qua VNPay</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Sau khi xác nhận, bạn sẽ được chuyển sang cổng thanh toán VNPay.
+          </p>
+        </div>
+
+        <p className="text-xs text-slate-400 dark:text-slate-500 mb-4 text-center">
+          Gói sẽ được kích hoạt sau khi cổng thanh toán xác nhận giao dịch thành công.
+        </p>
+
+        <div className="flex gap-3">
+          <button type="button" onClick={onClose} disabled={submitting} className="btn-secondary-custom flex-1 justify-center disabled:opacity-60">
+            Hủy
+          </button>
+          <button type="button" id="confirm-payment-btn" onClick={() => onConfirm(method)} disabled={submitting} className="btn-primary-custom flex-1 justify-center">
+            {submitting ? 'Đang tạo thanh toán...' : PAYMENT_METHODS.find((item) => item.value === method)?.action}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PlansPage() {
   const navigate = useNavigate()
   const { show } = useToast()
-  const { user, isAuthenticated, updateUser } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+  const [plans, setPlans] = useState([])
+  const [loadingPlans, setLoadingPlans] = useState(true)
+  const [planPage, setPlanPage] = useState(1)
   const [payingPlan, setPayingPlan] = useState(null)
-  const currentPlanId = user?.plan_id
+  const [creatingPayment, setCreatingPayment] = useState(false)
+  const currentPlanId = user?.plan_id ?? user?.planId ?? user?.PlanId ?? user?.plan?.id ?? user?.plan?.Id
+  const totalPlanPages = Math.max(1, Math.ceil(plans.length / PLANS_PER_PAGE))
+  const paginatedPlans = plans.slice((planPage - 1) * PLANS_PER_PAGE, planPage * PLANS_PER_PAGE)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const fetchPlans = async () => {
+      try {
+        setLoadingPlans(true)
+        const response = await apiFetch('/api/admin/plans')
+        const rawPlans = Array.isArray(response) ? response : response.data || []
+        const activePlans = rawPlans
+          .filter((plan) => plan.status !== false && plan.status !== 0 && plan.status !== '0')
+          .sort((a, b) => toNumber(a.price) - toNumber(b.price))
+          .map(mapApiPlan)
+
+        if (isMounted) {
+          setPlans(activePlans)
+          setPlanPage(1)
+        }
+      } catch (err) {
+        console.error(err)
+        if (isMounted) {
+          show({ type: 'error', title: 'Lỗi', message: 'Không thể tải danh sách gói dịch vụ.' })
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingPlans(false)
+        }
+      }
+    }
+
+    fetchPlans()
+
+    return () => {
+      isMounted = false
+    }
+  }, [show])
 
   const handleUpgrade = (plan) => {
     if (!isAuthenticated) {
@@ -215,18 +421,38 @@ export default function PlansPage() {
     setPayingPlan(plan)
   }
 
-  const handleConfirmPayment = (method) => {
-    if (payingPlan) {
-      updateUser({ plan_id: payingPlan.id })
+  const handleConfirmPayment = async (method = 'vnpay') => {
+    if (!payingPlan) return
+
+    if (payingPlan.price <= 0) {
+      show({ type: 'info', title: 'Gói miễn phí', message: 'Gói Free không cần thanh toán.' })
+      setPayingPlan(null)
+      return
     }
-    setPayingPlan(null)
-    show({
-      type: 'success',
-      title: 'Thanh toán thành công!',
-      message: `Tài khoản của bạn đã được nâng cấp lên ${payingPlan?.name} qua ${method.toUpperCase()}.`,
-      duration: 6000,
-    })
-    setTimeout(() => navigate('/profile'), 1500)
+
+    setCreatingPayment(true)
+    try {
+      const endpoint = method === 'paypal' ? '/api/paypal/create' : '/api/vnpay/create'
+      const response = await apiFetch(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ plan_id: payingPlan.id }),
+      })
+      const redirectUrl = method === 'paypal' ? response.approval_url : response.payment_url
+
+      if (!redirectUrl) {
+        throw new Error(method === 'paypal' ? 'Backend chưa trả về approval_url.' : 'Backend chưa trả về payment_url.')
+      }
+
+      window.location.href = redirectUrl
+    } catch (err) {
+      show({ type: 'error', title: 'Không thể tạo thanh toán', message: err.message || 'Vui lòng thử lại sau.' })
+      setCreatingPayment(false)
+    }
+  }
+
+  const handlePlanPageChange = (nextPage) => {
+    if (nextPage < 1 || nextPage > totalPlanPages || nextPage === planPage) return
+    setPlanPage(nextPage)
   }
 
   return (
@@ -244,15 +470,33 @@ export default function PlansPage() {
 
       {/* Plan cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {PLANS.map((plan) => (
-          <PlanCard
-            key={plan.id}
-            plan={plan}
-            currentPlanId={currentPlanId}
-            onUpgrade={handleUpgrade}
-          />
-        ))}
+        {loadingPlans ? (
+          <div className="md:col-span-2 flex justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+          </div>
+        ) : plans.length > 0 ? (
+          paginatedPlans.map((plan) => (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              currentPlanId={currentPlanId}
+              onUpgrade={handleUpgrade}
+            />
+          ))
+        ) : (
+          <div className="md:col-span-2 rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+            Chưa có gói dịch vụ khả dụng.
+          </div>
+        )}
       </div>
+
+      {!loadingPlans && plans.length > PLANS_PER_PAGE && (
+        <PaginationControls
+          page={planPage}
+          totalPages={totalPlanPages}
+          onPageChange={handlePlanPageChange}
+        />
+      )}
 
       {/* FAQ */}
       <div className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6">
@@ -273,10 +517,13 @@ export default function PlansPage() {
 
       {/* Payment modal */}
       {payingPlan && (
-        <PaymentModal
+        <PaymentGatewayModal
           plan={payingPlan}
-          onClose={() => setPayingPlan(null)}
+          onClose={() => {
+            if (!creatingPayment) setPayingPlan(null)
+          }}
           onConfirm={handleConfirmPayment}
+          submitting={creatingPayment}
         />
       )}
     </div>

@@ -46,6 +46,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    label: 'Thanh toán',
+    to: '/payments',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+          d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+      </svg>
+    ),
+  },
+  {
     label: 'Cộng đồng',
     to: '/shared-notes',
     icon: (
@@ -110,7 +120,8 @@ export default function Sidebar({ user, isAdmin = false }) {
 
   const displayName = user?.display_name || user?.name || 'Người dùng'
   const email = user?.email || 'user@example.com'
-  const isPremium = user?.plan_id != null
+  const subscriptionStatus = user?.subscription_status || 'free'
+  const isPremium = ['active', 'cancelled'].includes(subscriptionStatus) && user?.plan_expires_at && new Date(user.plan_expires_at) > new Date()
   const avatarInitial = displayName.charAt(0).toUpperCase()
 
   return (

@@ -14,11 +14,11 @@ function MiniBarChart({ bars, color }) {
   if (!bars || bars.length === 0) return null
   const max = Math.max(...bars, 1) // Prevent division by zero
   return (
-    <div className="flex items-end gap-[2px] h-8">
+    <div className="flex h-8 w-16 flex-shrink-0 items-end justify-end gap-[2px]">
       {bars.map((val, i) => (
         <div
           key={i}
-          className={`w-2 rounded-sm opacity-70 transition-all ${color.replace('bg-', 'bg-')}`}
+          className={`w-1.5 rounded-sm opacity-70 transition-all ${color.replace('bg-', 'bg-')}`}
           style={{ height: `${(val / max) * 100}%` }}
         />
       ))}
@@ -27,15 +27,19 @@ function MiniBarChart({ bars, color }) {
 }
 
 function StatCard({ stat }) {
+  const valueClass = stat.wide
+    ? 'break-words text-xl font-extrabold leading-tight text-slate-900 sm:text-2xl dark:text-white'
+    : 'truncate text-xl font-extrabold text-slate-900 sm:text-2xl dark:text-white'
+
   const content = (
-    <div className="flex items-start justify-between gap-3 p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-card hover:shadow-card-hover transition-all duration-200">
+    <div className="flex min-h-[124px] items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-card transition-all duration-200 hover:shadow-card-hover dark:border-slate-700 dark:bg-slate-800">
       <div className="flex items-center gap-4 flex-1 min-w-0">
         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${stat.color}`}>
           {stat.icon}
         </div>
         <div className="min-w-0">
-          <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{stat.value}</p>
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">{stat.label}</p>
+          <p className={valueClass} title={String(stat.value)}>{stat.value}</p>
+          <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400" title={stat.label}>{stat.label}</p>
           <p className={`text-xs mt-0.5 font-semibold ${stat.trend === 'alert' ? 'text-red-500' : stat.trend === 'up' ? 'text-emerald-500' : 'text-slate-400'}`}>
             {stat.trend === 'up' ? '↑ ' : stat.trend === 'alert' ? '⚠ ' : ''}{stat.delta}
           </p>
@@ -45,7 +49,7 @@ function StatCard({ stat }) {
     </div>
   )
 
-  return stat.link ? <Link to={stat.link}>{content}</Link> : content
+  return stat.link ? <Link to={stat.link} className="block min-w-0">{content}</Link> : content
 }
 
 export default function AdminDashboard() {
@@ -117,7 +121,7 @@ export default function AdminDashboard() {
       bars: [20, 25, 28, 30, 32, 35, 38],
     },
     {
-      label: 'Doanh thu', value: formatCurrency(stats?.revenue), delta: 'Cập nhật hôm nay', trend: 'neutral', color: 'bg-indigo-500',
+      label: 'Doanh thu', value: formatCurrency(stats?.revenue), delta: 'Cập nhật hôm nay', trend: 'neutral', color: 'bg-indigo-500', wide: true,
       icon: (
         <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -147,7 +151,7 @@ export default function AdminDashboard() {
   ]
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="w-full space-y-6">
       {/* Title */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Tổng quan hệ thống</h1>
@@ -157,7 +161,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {STATS_CARDS.map((s, i) => <StatCard key={i} stat={s} />)}
       </div>
 
@@ -180,7 +184,7 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Recent users */}
         <div className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700">

@@ -67,9 +67,10 @@ export function AuthProvider({ children }) {
   }, [])
 
   const refreshUserProfile = useCallback(async (baseUser) => {
-    if (!baseUser?.id) return { user: baseUser }
+    const baseUserId = baseUser?.id ?? baseUser?.Id
+    if (!baseUserId) return { user: baseUser }
 
-    const payload = await apiFetch(`/api/users/${baseUser.id}/profile`)
+    const payload = await apiFetch(`/api/users/${baseUserId}/profile`)
     const body = payload?.data || payload || {}
     const profileUser = body.user || body
     const nextUser = {
@@ -132,9 +133,10 @@ export function AuthProvider({ children }) {
   }, [logout])
 
   useEffect(() => {
-    if (!isAuthenticated || !user?.id || !token) return
+    const userId = user?.id ?? user?.Id
+    if (!isAuthenticated || !userId || !token) return
 
-    const hydrationKey = `${user.id}:${token}`
+    const hydrationKey = `${userId}:${token}`
     if (hydratedProfileKeyRef.current === hydrationKey) return
     hydratedProfileKeyRef.current = hydrationKey
 

@@ -74,6 +74,7 @@ export default function AdminLayout() {
   const { show } = useToast()
   const { logout } = useAuth()
   const [showLogout, setShowLogout] = useState(false)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try {
       return localStorage.getItem('jotdown_admin_sidebar_collapsed') === 'true'
@@ -88,6 +89,15 @@ export default function AdminLayout() {
       localStorage.setItem('jotdown_admin_sidebar_collapsed', String(updated))
       return updated
     })
+  }
+
+  const openMobileSidebar = () => {
+    setIsCollapsed(false)
+    setIsMobileSidebarOpen(true)
+  }
+
+  const closeMobileSidebar = () => {
+    setIsMobileSidebarOpen(false)
   }
 
   const handleLogout = async () => {
@@ -105,10 +115,19 @@ export default function AdminLayout() {
   return (
     <>
       <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+        {isMobileSidebarOpen && (
+          <button
+            type="button"
+            aria-label="Đóng menu quản trị"
+            className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden"
+            onClick={closeMobileSidebar}
+          />
+        )}
 
         {/* Admin sidebar */}
         <aside
-          className="flex-shrink-0 flex flex-col bg-slate-900 dark:bg-slate-950 border-r border-slate-700/50 transition-all duration-200"
+          className={`fixed inset-y-0 left-0 z-50 flex-shrink-0 flex flex-col bg-slate-900 dark:bg-slate-950 border-r border-slate-700/50 transition-all duration-200 lg:relative lg:z-auto lg:translate-x-0
+            ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
           style={{ width: isCollapsed ? '72px' : '240px' }}
         >
           {/* Logo + collapse toggle */}
@@ -152,6 +171,7 @@ export default function AdminLayout() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
+                onClick={closeMobileSidebar}
                 id={`admin-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                 title={isCollapsed ? item.label : undefined}
                 className={({ isActive }) =>
@@ -185,6 +205,7 @@ export default function AdminLayout() {
           <div className={`p-3 border-t border-slate-700/50 space-y-1`}>
             <NavLink
               to="/notes"
+              onClick={closeMobileSidebar}
               title={isCollapsed ? 'Về ứng dụng' : undefined}
               className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-slate-400 hover:bg-slate-700/50 hover:text-slate-200 transition-all cursor-pointer ${isCollapsed ? 'justify-center' : ''}`}
             >
@@ -211,15 +232,15 @@ export default function AdminLayout() {
         </aside>
 
         {/* Main */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {/* Header */}
-          <header className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-            <div className="flex items-center gap-3">
+          <header className="flex items-center justify-between gap-4 px-4 sm:px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
               {/* Mobile toggle */}
               <button
                 type="button"
                 id="admin-mobile-toggle"
-                onClick={toggleCollapse}
+                onClick={openMobileSidebar}
                 className="lg:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
               >
                 <svg className="w-5 h-5 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -228,13 +249,13 @@ export default function AdminLayout() {
               </button>
 
               {/* Breadcrumb */}
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider hidden sm:block">Admin Panel</p>
-                <h1 className="text-base font-bold text-slate-800 dark:text-white leading-tight">{pageTitle}</h1>
+                <h1 className="text-base font-bold text-slate-800 dark:text-white leading-tight truncate">{pageTitle}</h1>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-shrink-0">
               {/* Status indicator */}
               <div className="hidden sm:flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold px-3 py-1.5 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -255,7 +276,7 @@ export default function AdminLayout() {
           </header>
 
           {/* Page content */}
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="flex-1 min-w-0 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
             <Outlet />
           </main>
         </div>

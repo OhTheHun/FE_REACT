@@ -12,6 +12,18 @@ const EMPTY_STATS = {
   shared_notes: 0,
 }
 
+const getUserId = (user) => user?.id ?? user?.Id
+
+const getSubscriptionLabel = (status) => {
+  const labels = {
+    free: 'Free',
+    active: 'Gói còn hạn',
+    cancelled: 'Đã hủy gia hạn',
+    expired: 'Đã hết hạn',
+  }
+  return labels[status] || status || 'Free'
+}
+
 function normalizeProfileResponse(payload) {
   const body = payload?.data || payload || {}
   return {
@@ -39,7 +51,7 @@ export default function ProfilePage() {
   const { show } = useToast()
   const authUserRef = useRef(authUser)
   const avatarInputRef = useRef(null)
-  const authUserId = authUser?.id
+  const authUserId = getUserId(authUser)
   const [profileUser, setProfileUser] = useState(authUser)
   const [stats, setStats] = useState(EMPTY_STATS)
   const [displayName, setDisplayName] = useState(authUser?.display_name || authUser?.name || '')
@@ -49,6 +61,8 @@ export default function ProfilePage() {
   const [savingName, setSavingName] = useState(false)
   const [savingAvatar, setSavingAvatar] = useState(false)
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
+  const [showCancelSubscription, setShowCancelSubscription] = useState(false)
+  const [cancellingSubscription, setCancellingSubscription] = useState(false)
 
   useEffect(() => {
     authUserRef.current = authUser
@@ -102,7 +116,12 @@ export default function ProfilePage() {
     () => (displayName || user.email || 'U').charAt(0).toUpperCase(),
     [displayName, user.email]
   )
-  const isPremium = user.plan_id != null
+  const subscriptionStatus = user.subscription_status || 'free'
+  const expiresAt = user.plan_expires_at
+  const hasUsablePaidPlan = ['active', 'cancelled'].includes(subscriptionStatus) && expiresAt && new Date(expiresAt) > new Date()
+  const isPremium = hasUsablePaidPlan
+  const planName = user.plan?.name || user.plan_name || (isPremium ? 'Premium' : 'Free')
+  const canCancelSubscription = subscriptionStatus === 'active' && expiresAt
   const isVerified = user.email_verified_at != null
 
   const formatDate = (iso) =>
@@ -190,6 +209,32 @@ export default function ProfilePage() {
     show({ type: 'error', title: 'Tài khoản đã bị xóa', message: 'Rất tiếc khi bạn rời đi.' })
   }
 
+  const handleCancelSubscription = async () => {
+    if (!authUserId) return
+
+    setCancellingSubscription(true)
+    try {
+      const payload = await apiFetch(`/api/users/${authUserId}/subscription/cancel`, {
+        method: 'POST',
+      })
+      mergeUser({
+        plan_id: payload.plan_id,
+        subscription_status: payload.subscription_status,
+        plan_expires_at: payload.plan_expires_at,
+      })
+      setShowCancelSubscription(false)
+      show({
+        type: 'success',
+        title: 'Đã hủy gia hạn',
+        message: payload.message || 'Bạn vẫn có thể dùng gói hiện tại đến ngày hết hạn.',
+      })
+    } catch (err) {
+      show({ type: 'error', title: 'Không thể hủy gói', message: err.message || 'Vui lòng thử lại sau.' })
+    } finally {
+      setCancellingSubscription(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6">
@@ -240,8 +285,13 @@ export default function ProfilePage() {
             <div className="flex-1">
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${isPremium ? 'badge-premium' : 'badge-free'}`}>
-                  {isPremium ? (user.plan_name || 'Premium') : 'Free'}
+                  {planName}
                 </span>
+                {subscriptionStatus !== 'free' && (
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${isPremium ? 'badge-active' : 'badge-free'}`}>
+                    {getSubscriptionLabel(subscriptionStatus)}
+                  </span>
+                )}
                 <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${user.status === 'active' ? 'badge-active' : 'badge-inactive'}`}>
                   {user.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
                 </span>
@@ -298,6 +348,33 @@ export default function ProfilePage() {
               <p className="font-medium text-slate-700 dark:text-slate-300">{formatDate(user.last_login_at)}</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-card">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Gói hiện tại</h2>
+            <p className="mt-2 text-xl font-bold text-slate-900 dark:text-white">{planName}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Trạng thái: <span className="font-semibold">{getSubscriptionLabel(subscriptionStatus)}</span>
+            </p>
+            {expiresAt && (
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Có hiệu lực đến: <span className="font-semibold">{formatDate(expiresAt)}</span>
+              </p>
+            )}
+          </div>
+          {canCancelSubscription && (
+            <button
+              type="button"
+              id="cancel-subscription-btn"
+              onClick={() => setShowCancelSubscription(true)}
+              className="btn-secondary-custom justify-center"
+            >
+              Hủy gia hạn
+            </button>
+          )}
         </div>
       </div>
 
@@ -368,6 +445,17 @@ export default function ProfilePage() {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showCancelSubscription}
+        onClose={() => setShowCancelSubscription(false)}
+        onConfirm={handleCancelSubscription}
+        title="Hủy gia hạn gói"
+        message="Bạn sẽ vẫn dùng được gói hiện tại đến ngày hết hạn. Sau đó tài khoản sẽ về Free."
+        variant="warning"
+        confirmText={cancellingSubscription ? 'Đang hủy...' : 'Hủy gia hạn'}
+        cancelText="Ở lại"
+      />
 
       <ConfirmModal
         isOpen={showDeleteAccount}

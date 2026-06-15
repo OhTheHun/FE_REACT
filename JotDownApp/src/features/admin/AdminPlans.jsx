@@ -132,8 +132,8 @@ export default function AdminPlans() {
   const totalSubscribers = stats?.premium_users || 0
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="flex items-center justify-between">
+    <div className="w-full space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Gói dịch vụ</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Quản lý các gói Free và Premium.</p>
@@ -147,7 +147,7 @@ export default function AdminPlans() {
       </div>
 
       {/* Overview */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-card">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tổng người dùng Premium</p>
           <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">{totalSubscribers.toLocaleString('vi-VN')}</p>
@@ -163,9 +163,9 @@ export default function AdminPlans() {
       </div>
 
       {/* Plan cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
         {loading ? (
-          <div className="col-span-1 md:col-span-2 flex justify-center py-10">
+          <div className="col-span-full flex justify-center py-10">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
           </div>
         ) : plans.map((plan, index) => {

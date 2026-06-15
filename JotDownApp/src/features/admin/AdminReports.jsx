@@ -97,14 +97,14 @@ export default function AdminReports() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Báo cáo vi phạm</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Xử lý báo cáo nội dung công khai vi phạm tiêu chuẩn từ người dùng.</p>
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="rounded-2xl bg-red-50 dark:bg-red-900/20 p-4">
           <p className="text-2xl font-extrabold text-red-600 dark:text-red-400">{stats?.unresolved_reports || 0}</p>
           <p className="text-xs font-semibold text-red-500 mt-1">Chờ xử lý</p>

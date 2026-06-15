@@ -94,14 +94,14 @@ export default function AdminPayments() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Giao dịch thanh toán</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Duyệt và kiểm tra lịch sử nâng cấp gói dịch vụ.</p>
       </div>
 
       {/* Revenue summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-4">
           <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Tổng doanh thu</p>
           <p className="text-2xl font-extrabold text-emerald-700 dark:text-emerald-300 mt-1">
@@ -124,8 +124,8 @@ export default function AdminPayments() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="relative w-full xl:max-w-md">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -137,7 +137,7 @@ export default function AdminPayments() {
             className="form-input pl-9"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 xl:pb-0">
           {['all', 'pending', 'success', 'failed'].map((st) => (
             <button
               key={st}
@@ -149,7 +149,7 @@ export default function AdminPayments() {
                   ? 'bg-primary-500 text-white'
                   : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
             >
-              {st === 'all' ? 'Tất cả' : st === 'pending' ? '⏳ Chờ duyệt' : st === 'success' ? '✓ Thành công' : '✗ Thất bại'}
+              {st === 'all' ? 'Tất cả' : st === 'pending' ? ' Chờ duyệt' : st === 'success' ? ' Thành công' : ' Thất bại'}
             </button>
           ))}
         </div>
@@ -158,7 +158,7 @@ export default function AdminPayments() {
       {/* Table */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700/60 overflow-hidden shadow-card">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full min-w-[1080px] text-left">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700">
                 <th className="p-4 text-xs font-bold text-slate-400 uppercase">Mã đơn</th>
@@ -194,10 +194,7 @@ export default function AdminPayments() {
                     {Number(p.amount).toLocaleString('vi-VN')}đ
                   </td>
                   <td className="p-4 text-xs text-slate-500 dark:text-slate-400">
-                    <span className="flex items-center gap-1.5">
-                      <span>{METHOD_ICON[p.payment_method || p.method] || '💰'}</span>
-                      {p.payment_method || p.method}
-                    </span>
+                    {p.payment_method || p.method}
                   </td>
                   <td className="p-4 text-xs text-slate-400 whitespace-nowrap">{new Date(p.CreatedTime || p.date || p.created_at).toLocaleString('vi-VN')}</td>
                   <td className="p-4">
