@@ -323,20 +323,20 @@ export default function NoteEditor({
           {isAiDropdownOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setIsAiDropdownOpen(false)} />
-              <div className="absolute left-0 mt-2 w-56 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-lg py-1.5 z-50 animate-slide-up">
+              <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-lg py-1.5 z-50 animate-slide-up">
                 <button
                   type="button"
                   onClick={() => {
                     setIsAiDropdownOpen(false)
                     handleSummarize()
                   }}
-                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center justify-between cursor-pointer"
+                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center justify-between gap-3 cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
                     <span>📝</span>
                     <span>Tóm tắt ghi chú</span>
                   </div>
-                  {!isPremium && <span className="text-[9px] bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-bold">👑 PRO</span>}
+                  {!isPremium && <span className="text-[9px] bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-bold flex-shrink-0 whitespace-nowrap">👑 PRO</span>}
                 </button>
                 <button
                   type="button"
@@ -344,13 +344,13 @@ export default function NoteEditor({
                     setIsAiDropdownOpen(false)
                     handleFixGrammar()
                   }}
-                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center justify-between cursor-pointer"
+                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center justify-between gap-3 cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
                     <span>✍️</span>
                     <span>Sửa chính tả & ngữ pháp</span>
                   </div>
-                  {!isPremium && <span className="text-[9px] bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-bold">👑 PRO</span>}
+                  {!isPremium && <span className="text-[9px] bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-bold flex-shrink-0 whitespace-nowrap">👑 PRO</span>}
                 </button>
               </div>
             </>
