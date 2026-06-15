@@ -1,8 +1,10 @@
  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useToast } from '../../components/common/Toast'
 import ShareNoteModal from './ShareNoteModal'
 import NotePasswordModal from './NotePasswordModal'
+import { useAuth } from '../auth'
+import { summarizeNoteContent, fixGrammarNoteContent } from './aiService'
 
 const NOTE_COLORS = [
   { hex: '#ffffff', label: 'Mặc định', class: 'bg-white border-slate-300' },
@@ -40,7 +42,78 @@ export default function NoteEditor({
   const [isDirty, setIsDirty] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
-  const autoSaveTimer = useRef(null)
+
+  const [isAiDropdownOpen, setIsAiDropdownOpen] = useState(false)
+  const [isAiLoading, setIsAiLoading] = useState(false)
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
+  const [aiSummaryText, setAiSummaryText] = useState('')
+
+  const { user } = useAuth()
+  const subscriptionStatus = user?.subscription_status || 'free'
+  const expiresAt = user?.plan_expires_at
+  const isPremium = ['active', 'cancelled'].includes(subscriptionStatus) && expiresAt && new Date(expiresAt) > new Date()
+
+  const handleSummarize = async () => {
+    if (!isPremium) {
+      show({
+        type: 'warning',
+        title: 'Yêu cầu Premium',
+        message: 'Tính năng AI chỉ dành cho gói Premium. Vui lòng nâng cấp tài khoản để sử dụng!',
+      })
+      return
+    }
+    if (!content || !content.trim()) {
+      show({
+        type: 'warning',
+        message: 'Vui lòng nhập nội dung ghi chú để thực hiện tóm tắt.',
+      })
+      return
+    }
+
+    setIsAiLoading(true)
+    try {
+      const res = await summarizeNoteContent(content)
+      const summary = res.summary
+      setAiSummaryText(summary)
+      setIsSummaryModalOpen(true)
+      show({ type: 'success', message: 'Đã tóm tắt nội dung bằng AI.' })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Lỗi khi gọi AI tóm tắt.' })
+    } finally {
+      setIsAiLoading(false)
+    }
+  }
+
+  const handleFixGrammar = async () => {
+    if (!isPremium) {
+      show({
+        type: 'warning',
+        title: 'Yêu cầu Premium',
+        message: 'Tính năng AI chỉ dành cho gói Premium. Vui lòng nâng cấp tài khoản để sử dụng!',
+      })
+      return
+    }
+    if (!content || !content.trim()) {
+      show({
+        type: 'warning',
+        message: 'Vui lòng nhập nội dung ghi chú để thực hiện sửa lỗi.',
+      })
+      return
+    }
+
+    setIsAiLoading(true)
+    try {
+      const res = await fixGrammarNoteContent(content)
+      const fixed = res.fixed_content
+      setContent(fixed)
+      setIsDirty(true)
+      show({ type: 'success', message: 'Đã tối ưu hóa ngữ pháp và sửa lỗi chính tả thành công!' })
+    } catch (err) {
+      show({ type: 'error', message: err.message || 'Lỗi khi gọi AI sửa chính tả.' })
+    } finally {
+      setIsAiLoading(false)
+    }
+  }
 
   // Reset when note changes
   useEffect(() => {
@@ -84,18 +157,6 @@ export default function NoteEditor({
       setIsSaving(false)
     }
   }, [note, title, content, color, isPinned, isFavorite, visibility, noteLabels, isProtected, isSaving, onSave, show])
-
-  // Auto-save with debounce
-  useEffect(() => {
-    if (!isDirty) return
-    clearTimeout(autoSaveTimer.current)
-    autoSaveTimer.current = setTimeout(async () => {
-      const saved = await save()
-      if (!saved) return
-      show({ type: 'success', message: 'Tự động lưu thành công' })
-    }, 1500)
-    return () => clearTimeout(autoSaveTimer.current)
-  }, [isDirty, save, show])
 
   const markDirty = (fn) => (...args) => {
     fn(...args)
@@ -228,6 +289,61 @@ export default function NoteEditor({
           <span>👥</span>
         </button>
 
+        {/* AI Assistant Dropdown */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsAiDropdownOpen(!isAiDropdownOpen)}
+            disabled={isAiLoading}
+            title="Trợ lý AI"
+            className={`p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 transition-colors cursor-pointer flex items-center gap-1.5 ${isAiDropdownOpen ? 'bg-slate-100 dark:bg-slate-700' : ''}`}
+          >
+            <span>✨</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Trợ lý AI</span>
+            {isAiLoading && (
+              <svg className="animate-spin h-3 w-3 text-primary-500 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            )}
+          </button>
+          {isAiDropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsAiDropdownOpen(false)} />
+              <div className="absolute left-0 mt-2 w-56 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-lg py-1.5 z-50 animate-slide-up">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAiDropdownOpen(false)
+                    handleSummarize()
+                  }}
+                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span>📝</span>
+                    <span>Tóm tắt ghi chú</span>
+                  </div>
+                  {!isPremium && <span className="text-[9px] bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-bold">👑 PRO</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAiDropdownOpen(false)
+                    handleFixGrammar()
+                  }}
+                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span>✍️</span>
+                    <span>Sửa chính tả & ngữ pháp</span>
+                  </div>
+                  {!isPremium && <span className="text-[9px] bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-bold">👑 PRO</span>}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Color picker */}
         <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-slate-50 dark:bg-slate-800">
           {NOTE_COLORS.map((c) => (
@@ -329,6 +445,57 @@ export default function NoteEditor({
         note={note}
         mode={passwordModalMode}
       />
+
+      {/* AI Summary Modal */}
+      {isSummaryModalOpen && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" style={{ zIndex: 9999 }}>
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-800 rounded-3xl shadow-modal p-6 animate-slide-up">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>📝</span>
+                Tóm tắt ghi chú (AI)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsSummaryModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 max-h-60 overflow-y-auto">
+                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+                  {aiSummaryText}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(aiSummaryText)
+                    show({ type: 'success', message: 'Đã sao chép bản tóm tắt vào bộ nhớ tạm.' })
+                  }}
+                  className="btn-secondary-custom py-2 px-4 text-xs font-semibold"
+                >
+                  Sao chép
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSummaryModalOpen(false)}
+                  className="btn-primary-custom py-2 px-4 text-xs font-semibold"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

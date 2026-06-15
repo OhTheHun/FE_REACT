@@ -1,7 +1,10 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useToast } from '../../components/common/Toast'
 import { shareNote, addCollaborator } from './notesService'
+import ConfirmModal from '../../components/common/ConfirmModal'
+import { testModeration } from './aiService'
 
 export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) {
   const { show } = useToast()
@@ -11,6 +14,8 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
   const [collabRole, setCollabRole] = useState('view')
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingCollab, setIsAddingCollab] = useState(false)
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const [confirmReason, setConfirmReason] = useState('')
 
   useEffect(() => {
     if (note) {
@@ -27,7 +32,7 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
     show({ type: 'success', title: 'Đã sao chép liên kết chia sẻ' })
   }
 
-  const handleSaveVisibility = async () => {
+  const proceedSaveVisibility = async () => {
     setIsSaving(true)
     try {
       const result = await shareNote(note.id, visibility)
@@ -40,6 +45,26 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleSaveVisibility = async () => {
+    if (visibility === 'public') {
+      setIsSaving(true)
+      try {
+        const modRes = await testModeration(note.content || '')
+        if (modRes && modRes.is_safe === false) {
+          setConfirmReason(modRes.reason || 'Nội dung có tính chất nhạy cảm hoặc không an toàn.')
+          setIsConfirmOpen(true)
+          setIsSaving(false)
+          return
+        }
+      } catch (err) {
+        console.error('Moderation check failed:', err)
+      } finally {
+        setIsSaving(false)
+      }
+    }
+    await proceedSaveVisibility()
   }
 
   const handleAddCollaborator = async (e) => {
@@ -57,7 +82,7 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
     }
   }
 
-  return (
+  return createPortal(
     <div className="modal-overlay" role="dialog" aria-modal="true">
       <div className="relative w-full max-w-lg bg-white dark:bg-slate-800 rounded-3xl shadow-modal p-6 animate-slide-up">
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
@@ -174,6 +199,17 @@ export default function ShareNoteModal({ isOpen, onClose, note, onUpdateNote }) 
           </div>
         </div>
       </div>
-    </div>
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={proceedSaveVisibility}
+        title="Cảnh báo nội dung chia sẻ"
+        message={`Nội dung ghi chú này có thể không an toàn để chia sẻ công khai. Lý do: ${confirmReason}. Bạn có chắc chắn muốn tiếp tục chia sẻ không?`}
+        variant="warning"
+        confirmText="Tiếp tục chia sẻ"
+        cancelText="Hủy"
+      />
+    </div>,
+    document.body
   )
 }

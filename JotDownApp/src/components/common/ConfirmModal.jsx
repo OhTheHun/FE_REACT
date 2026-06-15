@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 
 const ICON_MAP = {
   danger: (
@@ -58,7 +59,7 @@ export default function ConfirmModal({
     ? 'bg-amber-500 hover:bg-amber-600 text-white inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 cursor-pointer'
     : 'btn-primary-custom'
 
-  return (
+  return createPortal(
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
       <div
         className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl shadow-modal p-6 animate-slide-up"
@@ -97,6 +98,7 @@ export default function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
