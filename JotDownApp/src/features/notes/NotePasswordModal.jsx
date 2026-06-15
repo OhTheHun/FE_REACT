@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = 'lock' }) {
   const [password, setPassword] = useState('')
@@ -45,7 +46,7 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
     }
   }
 
-  return (
+  return createPortal(
     <div className="modal-overlay" role="dialog" aria-modal="true">
       <div className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl shadow-modal p-6 animate-slide-up">
         <div className="flex items-center justify-between mb-4">
@@ -139,6 +140,7 @@ export default function NotePasswordModal({ isOpen, onClose, onConfirm, mode = '
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

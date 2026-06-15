@@ -1,5 +1,6 @@
  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useToast } from '../../components/common/Toast'
 import ShareNoteModal from './ShareNoteModal'
 import NotePasswordModal from './NotePasswordModal'
@@ -62,18 +63,24 @@ export default function NoteEditor({
       })
       return
     }
-    if (!content || !content.trim()) {
-      show({
-        type: 'warning',
-        message: 'Vui lòng nhập nội dung ghi chú để thực hiện tóm tắt.',
-      })
+    const trimmed = content?.trim() || ''
+    if (!trimmed) {
+      show({ type: 'warning', message: 'Vui lòng nhập nội dung ghi chú để thực hiện tóm tắt.' })
+      return
+    }
+    if (trimmed.length < 10) {
+      show({ type: 'warning', message: 'Nội dung ghi chú quá ngắn để thực hiện tóm tắt (tối thiểu 10 ký tự).' })
       return
     }
 
     setIsAiLoading(true)
     try {
-      const res = await summarizeNoteContent(content)
-      const summary = res.summary
+      const res = await summarizeNoteContent(trimmed)
+      const summary = res?.summary || res?.data?.summary
+      if (!summary) {
+        show({ type: 'error', message: 'AI không thể tóm tắt nội dung này. Vui lòng thử lại.' })
+        return
+      }
       setAiSummaryText(summary)
       setIsSummaryModalOpen(true)
       show({ type: 'success', message: 'Đã tóm tắt nội dung bằng AI.' })
@@ -93,18 +100,24 @@ export default function NoteEditor({
       })
       return
     }
-    if (!content || !content.trim()) {
-      show({
-        type: 'warning',
-        message: 'Vui lòng nhập nội dung ghi chú để thực hiện sửa lỗi.',
-      })
+    const trimmed = content?.trim() || ''
+    if (!trimmed) {
+      show({ type: 'warning', message: 'Vui lòng nhập nội dung ghi chú để thực hiện sửa lỗi.' })
+      return
+    }
+    if (trimmed.length < 10) {
+      show({ type: 'warning', message: 'Nội dung ghi chú quá ngắn để thực hiện sửa chính tả (tối thiểu 10 ký tự).' })
       return
     }
 
     setIsAiLoading(true)
     try {
-      const res = await fixGrammarNoteContent(content)
-      const fixed = res.fixed_content
+      const res = await fixGrammarNoteContent(trimmed)
+      const fixed = res?.fixed_content || res?.data?.fixed_content
+      if (!fixed) {
+        show({ type: 'error', message: 'AI không thể xử lý nội dung này. Vui lòng thử lại sau.' })
+        return
+      }
       setContent(fixed)
       setIsDirty(true)
       show({ type: 'success', message: 'Đã tối ưu hóa ngữ pháp và sửa lỗi chính tả thành công!' })
@@ -447,7 +460,7 @@ export default function NoteEditor({
       />
 
       {/* AI Summary Modal */}
-      {isSummaryModalOpen && (
+      {isSummaryModalOpen && createPortal(
         <div className="modal-overlay" role="dialog" aria-modal="true" style={{ zIndex: 9999 }}>
           <div className="relative w-full max-w-lg bg-white dark:bg-slate-800 rounded-3xl shadow-modal p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
@@ -494,7 +507,8 @@ export default function NoteEditor({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

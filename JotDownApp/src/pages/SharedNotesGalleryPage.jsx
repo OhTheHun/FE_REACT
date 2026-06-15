@@ -1,149 +1,93 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '../components/common/Toast'
+import { fetchPublicNotes, likeNote } from '../features/notes/notesService'
 
-// Mock categories for modern filters
-const CATEGORIES = [
-  { id: 'all', label: '⚡ Tất cả' },
-  { id: 'tech', label: '💻 Công nghệ & Code' },
-  { id: 'study', label: '📚 Học tập' },
-  { id: 'life', label: '🌱 Đời sống & Ý tưởng' },
-  { id: 'design', label: '🎨 Thiết kế / UI-UX' }
-]
+function getReadTime(content = '') {
+  const words = content.trim().split(/\s+/).length
+  const minutes = Math.max(1, Math.ceil(words / 200))
+  return `${minutes} phút đọc`
+}
 
-const STATIC_SHARED_NOTES = [
-  {
-    id: 'shared-1',
-    title: 'Lộ trình tự học ReactJS từ cơ bản đến nâng cao (2026)',
-    content: '1. Học vững HTML5, CSS3, ES6+ (Arrow functions, Destructuring, Promises, Async/Await).\n2. Tìm hiểu React cơ bản: Components, Props, State, Event Handling.\n3. Thành thạo React Hooks thông dụng: useState, useEffect, useContext, useMemo, useCallback.\n4. Quản lý State nâng cao: Redux Toolkit hoặc Zustand.\n5. Tối ưu hiệu năng: React.memo, Lazy Loading, Code Splitting.\n6. Thực hành xây dựng các dự án thực tế để rèn luyện tư duy component.',
-    color: '#D1FAE5',
-    category: 'tech',
-    author: 'Trần Hoàng Nam',
-    avatar: 'N',
-    role: 'Frontend Dev',
-    likes: 142,
-    views: '1.2k',
-    comments: 24,
-    readTime: '5 phút đọc',
-    updatedAt: new Date(Date.now() - 3600000 * 5).toISOString()
-  },
-  {
-    id: 'shared-2',
-    title: '10 mẹo CSS cực hay giúp tăng tốc độ thiết kế UI',
-    content: '- Sử dụng Flexbox & Grid kết hợp auto-fit/auto-fill cho các bố cục responsive nhanh gọn.\n- Tận dụng CSS Custom Properties (Variables) để dễ quản lý Light/Dark theme.\n- Sử dụng `clamp()` thay vì viết nhiều Media Queries cho font-size.\n- Sử dụng `:focus-within` để tạo hiệu ứng hover/focus viền cho cụm input.\n- Dùng transition cho transform & opacity để chuyển động mượt mà hơn.',
-    color: '#FEF3C7',
-    category: 'design',
-    author: 'Lê Thùy Chi',
-    avatar: 'C',
-    role: 'UI/UX Designer',
-    likes: 98,
-    views: '840',
-    comments: 12,
-    readTime: '3 phút đọc',
-    updatedAt: new Date(Date.now() - 3600000 * 12).toISOString()
-  },
-  {
-    id: 'shared-3',
-    title: 'Docker & Containerization cho người mới bắt đầu',
-    content: 'Docker là một nền tảng mã nguồn mở giúp tự động hóa việc triển khai ứng dụng dưới dạng các container ảo hóa độc lập.\n\nCác khái niệm cốt lõi:\n- Dockerfile: File cấu hình hướng dẫn build image.\n- Image: Bản đóng gói tĩnh chứa toàn bộ mã nguồn, thư viện.\n- Container: Một instance thực thi hoạt động của image.\n- Docker Compose: Công cụ định nghĩa và chạy nhiều container cùng một lúc bằng file YAML.',
-    color: '#DBEAFE',
-    category: 'tech',
-    author: 'Phạm Đức Anh',
-    avatar: 'A',
-    role: 'DevOps Engineer',
-    likes: 85,
-    views: '920',
-    comments: 18,
-    readTime: '6 phút đọc',
-    updatedAt: new Date(Date.now() - 3600000 * 24).toISOString()
-  },
-  {
-    id: 'shared-4',
-    title: 'Phương pháp ghi chép Cornell hiệu quả cho sinh viên',
-    content: 'Phương pháp Cornell chia một trang giấy thành 3 phần:\n1. Cột Ghi chép (phải): Viết nhanh các thông tin chính trong bài giảng.\n2. Cột Từ khóa/Câu hỏi (trái): Ghi chú các câu hỏi ôn tập, từ khóa sau buổi học.\n3. Phần Tóm tắt (cuối): Viết 3-4 câu tóm tắt nội dung cốt lõi của cả trang.\n\nGiúp tăng khả năng ghi nhớ và ôn tập thông tin trước kỳ thi cực kì khoa học.',
-    color: '#FCE7F3',
-    category: 'study',
-    author: 'Hoàng Diệu Vy',
-    avatar: 'V',
-    role: 'Medical Student',
-    likes: 215,
-    views: '2.4k',
-    comments: 45,
-    readTime: '4 phút đọc',
-    updatedAt: new Date(Date.now() - 3600000 * 2).toISOString()
-  }
-]
+function getAuthorInitial(name = '') {
+  return name?.charAt(0)?.toUpperCase() || 'U'
+}
 
 export default function SharedNotesGalleryPage() {
   const navigate = useNavigate()
   const { show } = useToast()
-  
-  const [sharedNotes, setSharedNotes] = useState([])
-  const [search, setSearch] = useState('')
-  const [activeCategory, setActiveCategory] = useState('all')
-  const [followedAuthors, setFollowedAuthors] = useState([])
 
-  useEffect(() => {
-    let userNotes = []
+  const [notes, setNotes] = useState([])
+  const [likedIds, setLikedIds] = useState(() => {
     try {
-      const local = localStorage.getItem('jotdown_notes')
-      if (local) {
-        const parsed = JSON.parse(local)
-        userNotes = parsed
-          .filter((n) => n.visibility === 'public')
-          .map((n) => ({
-            id: n.id,
-            title: n.title,
-            content: n.content,
-            color: n.color || '#7c3aed',
-            category: 'life',
-            author: 'Bạn (Tôi)',
-            avatar: 'U',
-            role: 'Thành viên mới',
-            likes: 12,
-            views: '45',
-            comments: 2,
-            readTime: '2 phút đọc',
-            updatedAt: n.updatedAt || new Date().toISOString()
-          }))
-      }
-    } catch (err) {
-      console.error(err)
+      return JSON.parse(localStorage.getItem('jotdown_liked_notes') || '[]')
+    } catch {
+      return []
     }
+  })
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
 
-    setSharedNotes([...userNotes, ...STATIC_SHARED_NOTES])
+  const loadNotes = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchPublicNotes()
+      setNotes(data)
+    } catch (err) {
+      console.error('Không thể tải ghi chú cộng đồng:', err)
+      // Silently fallback to empty - no toast spam
+      setNotes([])
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const handleLike = (id, e) => {
-    e.stopPropagation()
-    setSharedNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, likes: n.likes + 1 } : n))
-    )
-    show({ type: 'success', message: 'Cộng đồng: Đã lưu lượt thích ghi chú!' })
-  }
+  useEffect(() => {
+    loadNotes()
+  }, [loadNotes])
 
-  const toggleFollow = (author, e) => {
+  const handleLike = async (id, e) => {
     e.stopPropagation()
-    if (followedAuthors.includes(author)) {
-      setFollowedAuthors(followedAuthors.filter((a) => a !== author))
-      show({ type: 'info', message: `Đã hủy theo dõi ${author}` })
-    } else {
-      setFollowedAuthors([...followedAuthors, author])
-      show({ type: 'success', message: `Đang theo dõi các ghi chú của ${author}` })
+    const alreadyLiked = likedIds.includes(id)
+    // Optimistic update
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.id === id
+          ? { ...n, likes_count: (n.likes_count || 0) + (alreadyLiked ? -1 : 1) }
+          : n
+      )
+    )
+    const newLikedIds = alreadyLiked
+      ? likedIds.filter((lid) => lid !== id)
+      : [...likedIds, id]
+    setLikedIds(newLikedIds)
+    localStorage.setItem('jotdown_liked_notes', JSON.stringify(newLikedIds))
+
+    try {
+      await likeNote(id)
+    } catch {
+      // Revert on error
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === id
+            ? { ...n, likes_count: (n.likes_count || 0) + (alreadyLiked ? 1 : -1) }
+            : n
+        )
+      )
+      setLikedIds(likedIds)
+      localStorage.setItem('jotdown_liked_notes', JSON.stringify(likedIds))
     }
   }
 
   // Filter notes
-  const filteredNotes = sharedNotes.filter((n) => {
+  const filteredNotes = notes.filter((n) => {
     const matchesSearch =
       n.title?.toLowerCase().includes(search.toLowerCase()) ||
       n.content?.toLowerCase().includes(search.toLowerCase())
-    const matchesCategory = activeCategory === 'all' || n.category === activeCategory
-    return matchesSearch && matchesCategory
+    return matchesSearch
   })
 
-  // Featured Note (The one with most likes or design choice)
-  const featuredNote = STATIC_SHARED_NOTES[3] // Cornell method note
+  const featuredNote = filteredNotes[0] || null
 
   return (
     <div className="max-w-6xl mx-auto space-y-10 py-4">
@@ -162,7 +106,7 @@ export default function SharedNotesGalleryPage() {
             JotDown Hub Cộng Đồng
           </h1>
           <p className="text-sm sm:text-base text-violet-100 font-medium leading-relaxed">
-            Khám phá hàng ngàn ghi chú, sơ đồ tư duy, lộ trình học tập được thiết kế sáng tạo bởi cộng đồng JotDown. Chia sẻ kiến thức của bạn để cùng phát triển.
+            Khám phá ghi chú, lộ trình học tập và ý tưởng sáng tạo được chia sẻ bởi cộng đồng JotDown. Chia sẻ kiến thức của bạn để cùng phát triển.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <button
@@ -181,8 +125,8 @@ export default function SharedNotesGalleryPage() {
         </div>
       </div>
 
-      {/* Featured Post Card - Modern Magazine Layout */}
-      {featuredNote && (
+      {/* Featured Post Card */}
+      {!loading && featuredNote && (
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             ⭐ Ghi chú tiêu điểm hôm nay
@@ -191,11 +135,10 @@ export default function SharedNotesGalleryPage() {
             onClick={() => navigate(`/shared/note/${featuredNote.id}`)}
             className="group grid grid-cols-1 md:grid-cols-12 rounded-3xl overflow-hidden border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-xl transition-all duration-300 cursor-pointer"
           >
-            {/* Left accent column (md:3) */}
-            <div className="md:col-span-4 bg-gradient-to-tr from-pink-500/20 to-purple-500/20 p-8 flex flex-col justify-between relative border-b md:border-b-0 md:border-r border-slate-150 dark:border-slate-800">
+            <div className="md:col-span-4 bg-gradient-to-tr from-pink-500/20 to-primary-500/20 p-8 flex flex-col justify-between relative border-b md:border-b-0 md:border-r border-slate-150 dark:border-slate-800">
               <div className="space-y-4">
                 <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-pink-100 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400">
-                  🎯 BÁN CHẠY & NỔI BẬT
+                  🎯 NỔI BẬT
                 </span>
                 <h3 className="text-xl font-black text-slate-850 dark:text-white group-hover:text-primary-500 transition-colors">
                   {featuredNote.title}
@@ -203,32 +146,42 @@ export default function SharedNotesGalleryPage() {
               </div>
               <div className="mt-8 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold flex items-center justify-center border border-slate-200 dark:border-slate-700">
-                  {featuredNote.avatar}
+                  {getAuthorInitial(
+                    (featuredNote.user?.name || featuredNote.author) !== 'Ẩn danh'
+                      ? (featuredNote.user?.name || featuredNote.author)
+                      : 'Thành viên JotDown'
+                  )}
                 </div>
                 <div>
-                  <h4 className="text-xs font-extrabold text-slate-900 dark:text-white">{featuredNote.author}</h4>
-                  <p className="text-[10px] text-slate-400">{featuredNote.role}</p>
+                  <h4 className="text-xs font-extrabold text-slate-900 dark:text-white">
+                    {(featuredNote.user?.name || featuredNote.author) && (featuredNote.user?.name || featuredNote.author) !== 'Ẩn danh'
+                      ? (featuredNote.user?.name || featuredNote.author)
+                      : 'Thành viên JotDown'}
+                  </h4>
+                  <p className="text-[10px] text-slate-400">Thành viên JotDown</p>
                 </div>
               </div>
             </div>
 
-            {/* Right details column (md:8) */}
             <div className="md:col-span-8 p-6 sm:p-8 flex flex-col justify-between space-y-6">
               <p className="text-sm text-slate-600 dark:text-slate-350 line-clamp-5 leading-relaxed whitespace-pre-wrap">
                 {featuredNote.content}
               </p>
-              
+
               <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-4 text-xs text-slate-400">
-                  <span className="flex items-center gap-1">👁️ {featuredNote.views} lượt xem</span>
-                  <span className="flex items-center gap-1">💬 {featuredNote.comments} bình luận</span>
-                  <span>⏱️ {featuredNote.readTime}</span>
+                  <span className="flex items-center gap-1">👁️ {featuredNote.views_count || 0} lượt xem</span>
+                  <span>⏱️ {getReadTime(featuredNote.content)}</span>
                 </div>
                 <button
                   onClick={(e) => handleLike(featuredNote.id, e)}
-                  className="px-4 py-2 rounded-xl bg-pink-50 hover:bg-pink-100 dark:bg-pink-950/20 text-pink-600 dark:text-pink-400 text-xs font-bold transition-all flex items-center gap-1.5"
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    likedIds.includes(featuredNote.id)
+                      ? 'bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400'
+                      : 'bg-pink-50 hover:bg-pink-100 dark:bg-pink-950/20 text-pink-600 dark:text-pink-400'
+                  }`}
                 >
-                  <span>❤️ {featuredNote.likes}</span>
+                  <span>{likedIds.includes(featuredNote.id) ? '❤️' : '🤍'} {featuredNote.likes_count || 0}</span>
                 </button>
               </div>
             </div>
@@ -236,26 +189,9 @@ export default function SharedNotesGalleryPage() {
         </div>
       )}
 
-      {/* Explorer / Listing Filter menu Section */}
+      {/* Explorer / Listing Section */}
       <div id="explore" className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-850 pb-5">
-          <div className="flex flex-wrap items-center gap-2">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold tracking-tight transition-all duration-200 cursor-pointer
-                  ${activeCategory === cat.id
-                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-sm'
-                    : 'bg-slate-100 text-slate-650 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-450 dark:hover:bg-slate-700'
-                  }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Search tool */}
           <div className="relative w-full md:w-72">
             <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-450" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -271,18 +207,53 @@ export default function SharedNotesGalleryPage() {
         </div>
 
         {/* Gallery Cards layout */}
-        {filteredNotes.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="rounded-3xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 animate-pulse">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700" />
+                  <div className="flex-1 space-y-1">
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
+                    <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded w-1/2" />
+                  </div>
+                </div>
+                <div className="space-y-2 mb-4">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full" />
+                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-5/6" />
+                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-4/6" />
+                </div>
+                <div className="h-8 bg-slate-100 dark:bg-slate-800 rounded-xl mt-4" />
+              </div>
+            ))}
+          </div>
+        ) : filteredNotes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <svg className="w-12 h-12 text-slate-350 dark:text-slate-700 mb-3 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            <svg className="w-12 h-12 text-slate-350 dark:text-slate-700 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
-            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-350">Không tìm thấy ghi chú nào phù hợp</h4>
-            <p className="text-xs text-slate-400 mt-1">Vui lòng kiểm tra lại từ khóa tìm kiếm hoặc đổi danh mục.</p>
+            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-350">
+              {search ? 'Không tìm thấy ghi chú phù hợp' : 'Chưa có ghi chú công khai nào'}
+            </h4>
+            <p className="text-xs text-slate-400 mt-1">
+              {search ? 'Vui lòng kiểm tra lại từ khóa.' : 'Hãy là người đầu tiên chia sẻ ghi chú!'}
+            </p>
+            {!search && (
+              <button
+                onClick={() => navigate('/notes')}
+                className="mt-4 px-5 py-2 rounded-xl bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold transition-all cursor-pointer"
+              >
+                ✍️ Chia sẻ ngay
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredNotes.map((n) => {
-              const isFollowed = followedAuthors.includes(n.author)
+              const rawAuthor = n.user?.name || n.author || ''
+              const authorName = (rawAuthor && rawAuthor !== 'Ẩn danh') ? rawAuthor : 'Thành viên JotDown'
+              const isLiked = likedIds.includes(n.id)
+
               return (
                 <div
                   key={n.id}
@@ -290,39 +261,26 @@ export default function SharedNotesGalleryPage() {
                   className="group relative flex flex-col justify-between p-6 rounded-3xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 hover:-translate-y-1 cursor-pointer"
                 >
                   <div className="space-y-4">
-                    {/* Header: Author + follow button */}
+                    {/* Author header */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-950/20 text-primary-600 dark:text-primary-400 font-black text-xs flex items-center justify-center border border-primary-200/30">
-                          {n.avatar}
+                          {getAuthorInitial(authorName)}
                         </div>
                         <div>
-                          <h4 className="text-xs font-black text-slate-850 dark:text-white line-clamp-1">{n.author}</h4>
-                          <span className="text-[10px] text-slate-400 block">{n.role}</span>
+                          <h4 className="text-xs font-black text-slate-850 dark:text-white line-clamp-1">{authorName}</h4>
+                          <span className="text-[10px] text-slate-400 block">Thành viên JotDown</span>
                         </div>
                       </div>
-                      
-                      {n.author !== 'Bạn (Tôi)' && (
-                        <button
-                          onClick={(e) => toggleFollow(n.author, e)}
-                          className={`px-2 py-1 rounded-lg text-[9px] font-bold transition-all cursor-pointer
-                            ${isFollowed
-                              ? 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                              : 'bg-primary-50 text-primary-600 hover:bg-primary-100 dark:bg-primary-950/20 dark:text-primary-400'
-                            }`}
-                        >
-                          {isFollowed ? '✓ Đang theo' : '+ Theo dõi'}
-                        </button>
-                      )}
                     </div>
 
                     {/* Note details */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">
-                          🏷️ {n.category === 'tech' ? 'Công nghệ' : n.category === 'design' ? 'Thiết kế' : n.category === 'study' ? 'Học tập' : 'Ý tưởng'}
+                          🗒️ Ghi chú công khai
                         </span>
-                        <span className="text-[9px] text-slate-450">{n.readTime}</span>
+                        <span className="text-[9px] text-slate-450">{getReadTime(n.content)}</span>
                       </div>
                       <h3 className="text-sm font-extrabold text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-primary-500 transition-colors">
                         {n.title}
@@ -333,16 +291,20 @@ export default function SharedNotesGalleryPage() {
                     </div>
                   </div>
 
-                  {/* Likes views stats at bottom card */}
+                  {/* Stats footer */}
                   <div className="flex items-center justify-between mt-5 pt-3 border-t border-slate-100 dark:border-slate-850">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={(e) => handleLike(n.id, e)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-950/20 text-red-500 hover:scale-105 transition-all text-[11px] font-bold"
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all hover:scale-105 ${
+                          isLiked
+                            ? 'bg-red-100 dark:bg-red-950/30 text-red-500'
+                            : 'bg-red-50 hover:bg-red-100 dark:bg-red-950/20 text-red-400'
+                        }`}
                       >
-                        <span>❤️ {n.likes}</span>
+                        <span>{isLiked ? '❤️' : '🤍'} {n.likes_count || 0}</span>
                       </button>
-                      <span className="text-[10px] text-slate-400">👁️ {n.views}</span>
+                      <span className="text-[10px] text-slate-400">👁️ {n.views_count || 0}</span>
                     </div>
 
                     <span className="text-[10px] font-bold text-primary-500 group-hover:translate-x-1 transition-transform flex items-center gap-0.5">

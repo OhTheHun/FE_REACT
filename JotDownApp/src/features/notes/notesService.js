@@ -229,121 +229,6 @@ export async function createLabel(name, color) {
 export async function updateLabel(id, { name, color }) {
   const payload = await apiFetch(`/api/labels/${id}`, {
     method: 'PATCH',
-
-  const suffix = query.toString() ? `?${query.toString()}` : ''
-  const payload = await apiFetch(`/api/notes${suffix}`)
-  return normalizeNotesResponse(payload)
-}
-
-export async function createNote(extras = {}) {
-  const payload = await apiFetch('/api/notes', {
-    method: 'POST',
-    body: JSON.stringify(toNotePayload(createEmptyNote(extras))),
-  })
-
-  const responseData = payload?.note || payload?.data || payload
-  const hasValidData = responseData && typeof responseData === 'object' && Object.keys(responseData).length > 0
-
-  return normalizeNote(hasValidData ? responseData : createEmptyNote(extras))
-}
-
-export async function updateNote(note) {
-  const payload = await apiFetch(`/api/notes/${note.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(toNotePayload(note)),
-  })
-
-  return normalizeNote(payload.note || payload.data || payload)
-}
-
-export async function deleteNote(id) {
-  await apiFetch(`/api/notes/${id}`, {
-    method: 'DELETE',
-  })
-
-  return id
-}
-
-export async function pinNote(id, isPinned) {
-  const payload = await apiFetch(`/api/notes/${id}/pin`, {
-    method: 'PATCH',
-    body: JSON.stringify({ is_pinned: isPinned }),
-  })
-  return normalizeNote(payload.note || payload.data || payload)
-}
-
-export async function favoriteNote(id, isFavorite) {
-  const payload = await apiFetch(`/api/notes/${id}/favorite`, {
-    method: 'PATCH',
-    body: JSON.stringify({ is_favorite: isFavorite }),
-  })
-  return normalizeNote(payload.note || payload.data || payload)
-}
-
-export async function protectNote(id, isProtected, password) {
-  const payload = await apiFetch(`/api/notes/${id}/protection`, {
-    method: 'PATCH',
-    body: JSON.stringify({ is_protected: isProtected, password }),
-  })
-  return normalizeNote(payload.note || payload.data || payload)
-}
-
-export async function shareNote(id, visibility) {
-  const payload = await apiFetch(`/api/notes/${id}/share`, {
-    method: 'PATCH',
-    body: JSON.stringify({ visibility }),
-  })
-  return normalizeNote(payload.note || payload.data || payload)
-}
-
-export async function addCollaborator(id, email, permission = 'view') {
-  const payload = await apiFetch(`/api/notes/${id}/shares`, {
-    method: 'POST',
-    body: JSON.stringify({ email, permission }),
-  })
-  return payload.share || payload.data || payload
-}
-
-export async function fetchFolders(workspaceId = null) {
-  const backendWorkspaceId = workspaceId?.startsWith?.('ws-') ? null : workspaceId
-  const suffix = backendWorkspaceId ? `?workspace_id=${backendWorkspaceId}` : ''
-  const payload = await apiFetch(`/api/folders${suffix}`)
-  return payload.folders || payload.data || payload || []
-}
-
-export async function createFolder(name, workspaceId) {
-  const backendWorkspaceId = workspaceId?.startsWith?.('ws-') ? null : workspaceId
-  const payload = await apiFetch('/api/folders', {
-    method: 'POST',
-    body: JSON.stringify({ name, workspace_id: backendWorkspaceId }),
-  })
-  return payload.folder || payload.data || payload
-}
-
-export async function deleteFolder(id) {
-  await apiFetch(`/api/folders/${id}`, {
-    method: 'DELETE',
-  })
-  return id
-}
-
-export async function fetchLabels() {
-  const payload = await apiFetch(`/api/labels`)
-  const labels = payload.labels || payload.data || payload || []
-  return Array.isArray(labels) ? labels.map(normalizeLabel) : []
-}
-
-export async function createLabel(name, color) {
-  const payload = await apiFetch('/api/labels', {
-    method: 'POST',
-    body: JSON.stringify({ name, color }),
-  })
-  return normalizeLabel(payload.label || payload.data || payload)
-}
-
-export async function updateLabel(id, { name, color }) {
-  const payload = await apiFetch(`/api/labels/${id}`, {
-    method: 'PATCH',
     body: JSON.stringify({ name, color }),
   })
   return normalizeLabel(payload.label || payload.data || payload)
@@ -365,7 +250,15 @@ export async function fetchPublicNotes(params = {}) {
       query.set(key, value)
     }
   })
-  const payload = await apiFetch(`/api/notes/public?${query.toString()}`)
+
+  // Try /api/community/notes first, fall back to /api/notes?visibility=public
+  let payload
+  try {
+    payload = await apiFetch(`/api/community/notes?${query.toString()}`)
+  } catch {
+    payload = await apiFetch(`/api/notes?${query.toString()}`)
+  }
+
   const list = Array.isArray(payload)
     ? payload
     : payload?.data || payload?.notes || []
@@ -375,6 +268,29 @@ export async function fetchPublicNotes(params = {}) {
 export async function likeNote(id) {
   const payload = await apiFetch(`/api/notes/${id}/like`, {
     method: 'POST',
+  })
+  return payload
+}
+
+export async function fetchPublicNoteById(id) {
+  // Try /api/community/notes/{id} first, fall back to /api/notes/{id}
+  let payload
+  try {
+    payload = await apiFetch(`/api/community/notes/${id}`)
+  } catch {
+    payload = await apiFetch(`/api/notes/${id}`)
+  }
+  const note = payload?.note || payload?.data || payload
+  return normalizeNote(note)
+}
+
+export async function reportNote(noteId, { reason }) {
+  const payload = await apiFetch(`/api/reports`, {
+    method: 'POST',
+    body: JSON.stringify({
+      note_id: noteId,
+      reason: reason,
+    }),
   })
   return payload
 }

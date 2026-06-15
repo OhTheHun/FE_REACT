@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useToast } from '../../components/common/Toast'
 
 const LABEL_COLORS = [
@@ -49,7 +50,7 @@ export default function LabelManager({ isOpen, onClose, labels = [], onAddLabel,
     }
   }
 
-  return (
+  return createPortal(
     <div className="modal-overlay" role="dialog" aria-modal="true">
       <div className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl shadow-modal p-6 animate-slide-up">
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-700">
@@ -149,6 +150,7 @@ export default function LabelManager({ isOpen, onClose, labels = [], onAddLabel,
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
